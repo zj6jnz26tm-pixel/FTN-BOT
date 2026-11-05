@@ -12,24 +12,24 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-class FTNBot(commands.Bot):
+class FynexBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix='!', intents=intents)
 
     async def setup_hook(self):
         try:
             synced = await self.tree.sync()
-            print(f"Synced {len(synced)} commands successfully for FTN-BOT.")
+            print(f"Synced {len(synced)} commands successfully for Fynex Bot.")
         except Exception as e:
             print(f"Failed to sync commands: {e}")
 
-bot = FTNBot()
+bot = FynexBot()
 
 AI_CHANNEL_ID = 1567709659974860860
 
 GENERAL_RESPONSES = [
     "يا هلا! أنا معك، اسأل اللي بخاطرك وأنا أخوك في روم الـ AI ✨",
-    "صدقت! عاد علمنا، وش وديان السوالف اليوم في سيرفر FTN؟",
+    "صدقت! عاد علمنا، وش وديان السوالف اليوم في سيرفرنا؟",
     "ممم.. نقطة مهمة! شاركنا تفاصيل أكثر عشان نفيدك أكثر يا غالي.",
     "أنا حاضر وموجود طوال الوقت، تفضل اطرح سؤالك أو موضوعك!",
     "الله يقويك! كيف أقدر أساعدك بهذا الخصوص؟",
@@ -38,32 +38,29 @@ GENERAL_RESPONSES = [
 
 user_balances = {}
 
-# قاموس حفظ حالة الحمايات
 server_protections = {
-    "anti_links": True,   # حماية الروابط
-    "anti_spam": True,    # حماية السبام
-    "anti_bots": False    # حماية طرد البوتات غير الموثوقة
+    "anti_links": True,
+    "anti_spam": True,
+    "anti_bots": False
 }
 
-# ==================== 🛡️ متغيرات نظام حماية السبام ====================
 user_message_timestamps = defaultdict(list)
 user_warnings = defaultdict(int)
 
-SPAM_LIMIT = 4        # عدد الرسائل القصوى المسموح بها في الوقت المحدد
-TIME_WINDOW = 5.0     # نافذة الوقت بالثواني
-MAX_WARNINGS = 3      # عدد التحذيرات قبل تطبيق الكتم (Timeout)
+SPAM_LIMIT = 4
+TIME_WINDOW = 5.0
+MAX_WARNINGS = 3
 
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name} | FTN-BOT Online 🚀')
+    print(f'Logged in as {bot.user.name} | Fynex Bot Online 🚀')
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    # نظام الأوامر النصية العادية (مثل -روليت) الحصري للإداريين
     if message.content.startswith('-روليت') or message.content.startswith('-roulette'):
         if not message.author.guild_permissions.manage_guild:
             await message.reply("❌ عذراً يا غالي، هذا الأمر مخصص للإداريين فقط!", delete_after=5)
@@ -71,11 +68,11 @@ async def on_message(message):
 
         view = RouletteView()
         embed = discord.Embed(
-            title="🎰 سحب روليت FTN",
+            title="🎰 سحب روليت Fynex",
             description="سوف تبدأ لعبه روليت اضغط الزر للمشاركه ⏳ (لديك 30 ثانية)",
             color=discord.Color.gold()
         )
-        embed.set_footer(text="FTN-BOT Events")
+        embed.set_footer(text="Fynex Bot Events")
         
         sent_msg = await message.channel.send(embed=embed, view=view)
 
@@ -95,12 +92,11 @@ async def on_message(message):
             color=discord.Color.green()
         )
         win_embed.set_thumbnail(url=winner.display_avatar.url)
-        win_embed.set_footer(text="FTN-BOT Roulette Winner")
+        win_embed.set_footer(text="Fynex Bot Roulette Winner")
 
         await sent_msg.edit(embed=win_embed, view=None)
         return
 
-    # 1. تطبيق حماية الروابط إذا كانت مفعلة
     if server_protections["anti_links"] and ("http://" in message.content or "https://" in message.content):
         if not message.author.guild_permissions.manage_messages:
             try:
@@ -110,20 +106,16 @@ async def on_message(message):
                 pass
             return
 
-    # 2. تطبيق حماية السبام إذا كانت مفعلة
     if server_protections["anti_spam"]:
-        # استثناء المشرفين من نظام حماية السبام لكي لا يتم كتمهم
         if not message.author.guild_permissions.manage_messages:
             user_id = message.author.id
             current_time = time.time()
             
             timestamps = user_message_timestamps[user_id]
-            # تنظيف الطوابع الزمنية القديمة خارج نافذة الوقت
             timestamps = [t for t in timestamps if current_time - t < TIME_WINDOW]
             timestamps.append(current_time)
             user_message_timestamps[user_id] = timestamps
             
-            # إذا تجاوز المستخدم الحد المسموح من الرسائل السريعة
             if len(timestamps) > SPAM_LIMIT:
                 try:
                     await message.delete()
@@ -151,9 +143,8 @@ async def on_message(message):
                         user_warnings[user_id] = 0
                     except discord.Forbidden:
                         pass
-                return  # إيقاف معالجة الرسالة لكي لا تتداخل مع الرد الآلي
+                return
 
-    # الرد الآلي في روم الـ AI
     if message.channel.id == AI_CHANNEL_ID and not message.content.startswith('!'):
         reply_text = random.choice(GENERAL_RESPONSES)
         await message.reply(reply_text)
@@ -190,7 +181,7 @@ async def protections(interaction: discord.Interaction):
     spam_status = "مفعل ✅" if server_protections["anti_spam"] else "غير مفعل ❌"
     bots_status = "مفعل ✅" if server_protections["anti_bots"] else "غير مفعل ❌"
 
-    embed = discord.Embed(title="🛡️ لوحة حمايات سيرفر FTN", description="حالة الحمايات الحالية في السيرفر:", color=discord.Color.dark_red())
+    embed = discord.Embed(title="🛡️ لوحة حمايات Fynex Bot", description="حالة الحمايات الحالية في السيرفر:", color=discord.Color.dark_red())
     embed.add_field(name="🔗 حماية الروابط (anti_links)", value=links_status, inline=False)
     embed.add_field(name="💬 حماية السبام (anti_spam)", value=spam_status, inline=False)
     embed.add_field(name="🤖 حماية البوتات (anti_bots)", value=bots_status, inline=False)
@@ -240,6 +231,64 @@ async def unlock(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
+# ==================== 🛠️ الأوامر الإدارية الجديدة ====================
+
+@bot.tree.command(name="mute", description="كتم العضو في الروم الصوتي")
+@app_commands.default_permissions(mute_members=True)
+async def mute(interaction: discord.Interaction, member: discord.Member, reason: str = "بدون سبب"):
+    if not member.voice:
+        await interaction.response.send_message("❌ العضو ليس في روم صوتي حالياً!", ephemeral=True)
+        return
+    await member.edit(mute=True, reason=reason)
+    await interaction.response.send_message(f"🔇 تم كتم العضو {member.mention} صوتياً بنجاح.", ephemeral=True)
+
+@bot.tree.command(name="unmute", description="إلغاء الكتم الصوتي عن العضو")
+@app_commands.default_permissions(mute_members=True)
+async def unmute(interaction: discord.Interaction, member: discord.Member):
+    if not member.voice:
+        await interaction.response.send_message("❌ العضو ليس في روم صوتي حالياً!", ephemeral=True)
+        return
+    await member.edit(mute=False)
+    await interaction.response.send_message(f"🔊 تم إلغاء الكتم الصوتي عن العضو {member.mention}.", ephemeral=True)
+
+@bot.tree.command(name="move", description="نقل عضو إلى روم صوتي آخر")
+@app_commands.default_permissions(move_members=True)
+async def move(interaction: discord.Interaction, member: discord.Member, channel: discord.VoiceChannel):
+    if not member.voice:
+        await interaction.response.send_message("❌ العضو ليس متصلاً بأي روم صوتي!", ephemeral=True)
+        return
+    await member.move_to(channel)
+    await interaction.response.send_message(f"🔀 تم نقل العضو {member.mention} إلى الروم {channel.mention}.", ephemeral=True)
+
+@bot.tree.command(name="deafen", description="إصمام (Deafen) العضو في الروم الصوتي")
+@app_commands.default_permissions(deafen_members=True)
+async def deafen(interaction: discord.Interaction, member: discord.Member, reason: str = "بدون سبب"):
+    if not member.voice:
+        await interaction.response.send_message("❌ العضو ليس في روم صوتي حالياً!", ephemeral=True)
+        return
+    await member.edit(deafen=True, reason=reason)
+    await interaction.response.send_message(f"🔇 تم إصمام العضو {member.mention} بنجاح.", ephemeral=True)
+
+@bot.tree.command(name="timeout", description="إعطاء تايم آوت (ميوت كتابي) لعضو لفترة معينة")
+@app_commands.default_permissions(moderate_members=True)
+async def timeout(interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str = "بدون سبب"):
+    duration = timedelta(minutes=minutes)
+    await member.timeout(duration, reason=reason)
+    await interaction.response.send_message(f"⏳ تم إعطاء تايم آوت للعضو {member.mention} لمدة {minutes} دقيقة.", ephemeral=True)
+
+@bot.tree.command(name="kick", description="طرد عضو من السيرفر (للإدارة العليا)")
+@app_commands.default_permissions(kick_members=True)
+async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "بدون سبب"):
+    await member.kick(reason=reason)
+    await interaction.response.send_message(f"👢 تم طرد العضو {member.mention} من السيرفر بنجاح.", ephemeral=True)
+
+@bot.tree.command(name="ban", description="حظر عضو من السيرفر نهائياً (للإدارة العليا)")
+@app_commands.default_permissions(ban_members=True)
+async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "بدون سبب"):
+    await member.ban(reason=reason)
+    await interaction.response.send_message(f"🔨 تم حظر العضو {member.mention} من السيرفر بنجاح.", ephemeral=True)
+
+
 # ==================== 💰 نظام الاقتصاد ====================
 
 @bot.tree.command(name="balance", description="عرض رصيدك من العملات")
@@ -260,19 +309,21 @@ async def daily(interaction: discord.Interaction):
 
 # ==================== 👥 الأعضاء والمساعدة ====================
 
-@bot.tree.command(name="ping", description="عرض سرعة استجابة بوت FTN")
+@bot.tree.command(name="ping", description="عرض سرعة استجابة Fynex Bot")
 async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
-    embed = discord.Embed(title="🏓 سرعة استجابة بوت FTN", description=f"⚡ السرعة: **{latency}ms**", color=discord.Color.green())
+    embed = discord.Embed(title="🏓 سرعة استجابة Fynex Bot", description=f"⚡ السرعة: **{latency}ms**", color=discord.Color.green())
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="help", description="عرض جميع أوامر بوت FTN")
+@bot.tree.command(name="help", description="عرض جميع أوامر Fynex Bot")
 async def help_cmd(interaction: discord.Interaction):
-    embed = discord.Embed(title="🌟 قائمة أوامر بوت FTN الشاملة", description="جميع الأوامر تعمل بنظام Slash Commands (-):", color=discord.Color.dark_embed())
-    embed.add_field(name="🎮 الألعاب", value="`-روليت` (للإداريين) - `/games`", inline=False)
+    embed = discord.Embed(title="🌟 قائمة أوامر Fynex Bot الشاملة", description="جميع الأوامر تعمل بنظام Slash Commands:", color=discord.Color.dark_embed())
+    embed.add_field(name="🎮 الألعاب", value="`-روليت` (للإداريين)", inline=False)
     embed.add_field(name="🛡️ الإدارة والحمايات", value="`/protections` - `/toggle_protection` - `/clear` - `/lock` - `/unlock`", inline=False)
+    embed.add_field(name="🛠️ الإدارة الصوتية والكتابية", value="`/mute` - `/unmute` - `/move` - `/deafen` - `/timeout`", inline=False)
+    embed.add_field(name="⚖️ الرتب العليا (الإدارة العليا)", value="`/kick` - `/ban`", inline=False)
     embed.add_field(name="💰 الاقتصاد والأعضاء", value="`/balance` - `/daily` - `/ping` - `/help`", inline=False)
-    embed.set_footer(text="FTN-BOT Ultimate System")
+    embed.set_footer(text="Fynex Bot Ultimate System")
     await interaction.response.send_message(embed=embed)
 
 bot.run(os.getenv('TOKEN'))
