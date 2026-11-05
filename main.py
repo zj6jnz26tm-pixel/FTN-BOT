@@ -108,3 +108,7 @@ async def ping(ctx):
     await ctx.send('Pong! 🏓 البوت شغال وسريع جداً.')
 
 bot.run(os.getenv('TOKEN'))
+
+if message.channel.name != "ai":
+    await bot.process_commands(message)
+    return
