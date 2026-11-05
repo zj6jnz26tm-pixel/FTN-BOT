@@ -35,6 +35,13 @@ GENERAL_RESPONSES = [
 
 user_balances = {}
 
+# قاموس حفظ حالة الحمايات (افتراضياً مفعلة أو معطلة)
+server_protections = {
+    "anti_links": True,   # حماية الروابط
+    "anti_spam": True,    # حماية السبام
+    "anti_bots": False    # حماية طرد البوتات غير الموثوقة
+}
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name} | FTN-BOT Online 🚀')
@@ -46,7 +53,6 @@ async def on_message(message):
 
     # نظام الأوامر النصية العادية (مثل -روليت) الحصري للإداريين
     if message.content.startswith('-روليت') or message.content.startswith('-roulette'):
-        # التحقق من صلاحيات الإدارة (مثلاً إدارة الرسائل أو الرتب)
         if not message.author.guild_permissions.manage_guild:
             await message.reply("❌ عذراً يا غالي، هذا الأمر مخصص للإداريين فقط!", delete_after=5)
             return
@@ -61,7 +67,6 @@ async def on_message(message):
         
         sent_msg = await message.channel.send(embed=embed, view=view)
 
-        # الانتظار لمدة 30 ثانية لتسجيل اللاعبين
         import asyncio
         await asyncio.sleep(30)
 
@@ -70,7 +75,6 @@ async def on_message(message):
             await sent_msg.edit(embed=embed, view=None)
             return
 
-        # اختيار الفائز عشوائياً
         winner = random.choice(view.participants)
         
         win_embed = discord.Embed(
@@ -83,6 +87,16 @@ async def on_message(message):
 
         await sent_msg.edit(embed=win_embed, view=None)
         return
+
+    # تطبيق حماية الروابط إذا كانت مفعلة
+    if server_protections["anti_links"] and ("http://" in message.content or "https://" in message.content):
+        if not message.author.guild_permissions.manage_messages:
+            try:
+                await message.delete()
+                await message.channel.send(f"⚠️ {message.author.mention} ممنوع إرسال الروابط هنا!", delete_after=5)
+            except:
+                pass
+            return
 
     if message.channel.id == AI_CHANNEL_ID and not message.content.startswith('!'):
         reply_text = random.choice(GENERAL_RESPONSES)
@@ -111,7 +125,39 @@ class RouletteView(discord.ui.View):
             child.disabled = True
 
 
-# ==================== 🛡️ نظام الإدارة والأوامر ====================
+# ==================== 🛡️ نظام الحمايات والإدارة ====================
+
+@bot.tree.command(name="protections", description="عرض حالة جميع الحمايات في السيرفر")
+@app_commands.default_permissions(manage_guild=True)
+async def protections(interaction: discord.Interaction):
+    links_status = "مفعل ✅" if server_protections["anti_links"] else "غير مفعل ❌"
+    spam_status = "مفعل ✅" if server_protections["anti_spam"] else "غير مفعل ❌"
+    bots_status = "مفعل ✅" if server_protections["anti_bots"] else "غير مفعل ❌"
+
+    embed = discord.Embed(title="🛡️ لوحة حمايات سيرفر FTN", description="حالة الحمايات الحالية في السيرفر:", color=discord.Color.dark_red())
+    embed.add_field(name="🔗 حماية الروابط (anti_links)", value=links_status, inline=False)
+    embed.add_field(name="💬 حماية السبام (anti_spam)", value=spam_status, inline=False)
+    embed.add_field(name="🤖 حماية البوتات (anti_bots)", value=bots_status, inline=False)
+    embed.set_footer(text="لتغيير الحالة استخدم أمر /toggle_protection")
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="toggle_protection", description="تفعيل أو تعطيل حماية معينة")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.choices(protection=[
+    app_commands.Choice(name="حماية الروابط (anti_links)", value="anti_links"),
+    app_commands.Choice(name="حماية السبام (anti_spam)", value="anti_spam"),
+    app_commands.Choice(name="حماية البوتات (anti_bots)", value="anti_bots")
+], status=[
+    app_commands.Choice(name="تفعيل (On)", value="on"),
+    app_commands.Choice(name="تعطيل (Off)", value="off")
+])
+async def toggle_protection(interaction: discord.Interaction, protection: str, status: str):
+    is_on = True if status == "on" else False
+    server_protections[protection] = is_on
+    
+    state_text = "تفعيلها ✅" if is_on else "تعطيلها ❌"
+    embed = discord.Embed(title="🛡️ تحديث نظام الحماية", description=f"تم **{state_text}** بنجاح للحماية المطلوبة.", color=discord.Color.green() if is_on else discord.Color.red())
+    await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="clear", description="مسح عدد معين من الرسائل")
 @app_commands.default_permissions(manage_messages=True)
@@ -166,11 +212,10 @@ async def ping(interaction: discord.Interaction):
 
 @bot.tree.command(name="help", description="عرض جميع أوامر بوت FTN")
 async def help_cmd(interaction: discord.Interaction):
-    embed = discord.Embed(title="🌟 قائمة أوامر بوت FTN الشاملة", description="جميع الأوامر تعمل بنظام Slash Commands (-) باستثناء الروليت الإداري:", color=discord.Color.dark_embed())
-    embed.add_field(name="🎮 الألعاب", value="`-روليت` (للإداريين) - `/games` - `/rps` - `/guess`", inline=False)
-    embed.add_field(name="🛡️ الإدارة", value="`/clear` - `/lock` - `/unlock`", inline=False)
-    embed.add_field(name="💰 الاقتصاد", value="`/balance` - `/daily`", inline=False)
-    embed.add_field(name="👥 الأعضاء", value="`/ping` - `/help`", inline=False)
+    embed = discord.Embed(title="🌟 قائمة أوامر بوت FTN الشاملة", description="جميع الأوامر تعمل بنظام Slash Commands (-):", color=discord.Color.dark_embed())
+    embed.add_field(name="🎮 الألعاب", value="`-روليت` (للإداريين) - `/games`", inline=False)
+    embed.add_field(name="🛡️ الإدارة والحمايات", value="`/protections` - `/toggle_protection` - `/clear` - `/lock` - `/unlock`", inline=False)
+    embed.add_field(name="💰 الاقتصاد والأعضاء", value="`/balance` - `/daily` - `/ping` - `/help`", inline=False)
     embed.set_footer(text="FTN-BOT Ultimate System")
     await interaction.response.send_message(embed=embed)
 
