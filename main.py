@@ -51,7 +51,15 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# ==================== 🎮 نظام الألعاب ====================
+# ==================== 🎮 لوحة الألعاب (أمر /games) ====================
+
+@bot.tree.command(name="games", description="لوحة الألعاب الترفيهية التفاعلية")
+async def games(interaction: discord.Interaction):
+    embed = discord.Embed(title="🎮 لوحة ألعاب FTN", description="اختر إحدى الألعاب التالية واستمتع:", color=discord.Color.blurple())
+    embed.add_field(name="حجر ورقة مقص", value="`/rps`", inline=True)
+    embed.add_field(name="تخمين الرقم", value="`/guess`", inline=True)
+    embed.set_footer(text="FTN-BOT Gaming System")
+    await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="rps", description="لعبة حجر ورقة مقص ضد البوت")
 @app_commands.choices(choice=[
@@ -145,7 +153,7 @@ async def ping(interaction: discord.Interaction):
 @bot.tree.command(name="help", description="عرض جميع أوامر بوت FTN")
 async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🌟 قائمة أوامر بوت FTN الشاملة", description="جميع الأوامر تعمل بنظام Slash Commands (/):", color=discord.Color.dark_embed())
-    embed.add_field(name="🎮 الألعاب", value="`/rps` - `/guess`", inline=False)
+    embed.add_field(name="🎮 الألعاب", value="`/games` - `/rps` - `/guess`", inline=False)
     embed.add_field(name="🛡️ الإدارة", value="`/clear` - `/lock` - `/unlock`", inline=False)
     embed.add_field(name="💰 الاقتصاد", value="`/balance` - `/daily`", inline=False)
     embed.add_field(name="👥 الأعضاء", value="`/ping` - `/help`", inline=False)
