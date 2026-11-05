@@ -1,6 +1,9 @@
 
 import os
 import random
+import time
+from datetime import timedelta
+from collections import defaultdict
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -35,12 +38,21 @@ GENERAL_RESPONSES = [
 
 user_balances = {}
 
-# قاموس حفظ حالة الحمايات (افتراضياً مفعلة أو معطلة)
+# قاموس حفظ حالة الحمايات
 server_protections = {
     "anti_links": True,   # حماية الروابط
     "anti_spam": True,    # حماية السبام
     "anti_bots": False    # حماية طرد البوتات غير الموثوقة
 }
+
+# ==================== 🛡️ متغيرات نظام حماية السبام ====================
+user_message_timestamps = defaultdict(list)
+user_warnings = defaultdict(int)
+
+SPAM_LIMIT = 4        # عدد الرسائل القصوى المسموح بها في الوقت المحدد
+TIME_WINDOW = 5.0     # نافذة الوقت بالثواني
+MAX_WARNINGS = 3      # عدد التحذيرات قبل تطبيق الكتم (Timeout)
+
 
 @bot.event
 async def on_ready():
@@ -88,7 +100,7 @@ async def on_message(message):
         await sent_msg.edit(embed=win_embed, view=None)
         return
 
-    # تطبيق حماية الروابط إذا كانت مفعلة
+    # 1. تطبيق حماية الروابط إذا كانت مفعلة
     if server_protections["anti_links"] and ("http://" in message.content or "https://" in message.content):
         if not message.author.guild_permissions.manage_messages:
             try:
@@ -98,6 +110,50 @@ async def on_message(message):
                 pass
             return
 
+    # 2. تطبيق حماية السبام إذا كانت مفعلة
+    if server_protections["anti_spam"]:
+        # استثناء المشرفين من نظام حماية السبام لكي لا يتم كتمهم
+        if not message.author.guild_permissions.manage_messages:
+            user_id = message.author.id
+            current_time = time.time()
+            
+            timestamps = user_message_timestamps[user_id]
+            # تنظيف الطوابع الزمنية القديمة خارج نافذة الوقت
+            timestamps = [t for t in timestamps if current_time - t < TIME_WINDOW]
+            timestamps.append(current_time)
+            user_message_timestamps[user_id] = timestamps
+            
+            # إذا تجاوز المستخدم الحد المسموح من الرسائل السريعة
+            if len(timestamps) > SPAM_LIMIT:
+                try:
+                    await message.delete()
+                except discord.Forbidden:
+                    pass
+                
+                user_warnings[user_id] += 1
+                current_warnings = user_warnings[user_id]
+                
+                if current_warnings < MAX_WARNINGS:
+                    try:
+                        warning_msg = await message.channel.send(
+                            f"⚠️ {message.author.mention}, يرجى التوقف عن السبام! (تحذير {current_warnings}/{MAX_WARNINGS})"
+                        )
+                        await warning_msg.delete(delay=5.0)
+                    except:
+                        pass
+                else:
+                    try:
+                        await message.author.timeout(timedelta(minutes=5), reason="تجاوز حد التحذيرات للسبام")
+                        punish_msg = await message.channel.send(
+                            f"🔇 تم كتم العضو {message.author.mention} لمدة 5 دقائق بسبب استمرار السبام."
+                        )
+                        await punish_msg.delete(delay=7.0)
+                        user_warnings[user_id] = 0
+                    except discord.Forbidden:
+                        pass
+                return  # إيقاف معالجة الرسالة لكي لا تتداخل مع الرد الآلي
+
+    # الرد الآلي في روم الـ AI
     if message.channel.id == AI_CHANNEL_ID and not message.content.startswith('!'):
         reply_text = random.choice(GENERAL_RESPONSES)
         await message.reply(reply_text)
