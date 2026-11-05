@@ -44,6 +44,46 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # نظام الأوامر النصية العادية (مثل -روليت) الحصري للإداريين
+    if message.content.startswith('-روليت') or message.content.startswith('-roulette'):
+        # التحقق من صلاحيات الإدارة (مثلاً إدارة الرسائل أو الرتب)
+        if not message.author.guild_permissions.manage_guild:
+            await message.reply("❌ عذراً يا غالي، هذا الأمر مخصص للإداريين فقط!", delete_after=5)
+            return
+
+        view = RouletteView()
+        embed = discord.Embed(
+            title="🎰 سحب روليت FTN",
+            description="سوف تبدأ لعبه روليت اضغط الزر للمشاركه ⏳ (لديك 30 ثانية)",
+            color=discord.Color.gold()
+        )
+        embed.set_footer(text="FTN-BOT Events")
+        
+        sent_msg = await message.channel.send(embed=embed, view=view)
+
+        # الانتظار لمدة 30 ثانية لتسجيل اللاعبين
+        import asyncio
+        await asyncio.sleep(30)
+
+        if not view.participants:
+            embed.description = "❌ انتهى الوقت ولم يشارك أحد في الروليت!"
+            await sent_msg.edit(embed=embed, view=None)
+            return
+
+        # اختيار الفائز عشوائياً
+        winner = random.choice(view.participants)
+        
+        win_embed = discord.Embed(
+            title="🎉 إعلان فائز الروليت",
+            description=f"وقع الاختيار على ({winner.mention}) مبروك الفوز يا وحش! 🏆",
+            color=discord.Color.green()
+        )
+        win_embed.set_thumbnail(url=winner.display_avatar.url)
+        win_embed.set_footer(text="FTN-BOT Roulette Winner")
+
+        await sent_msg.edit(embed=win_embed, view=None)
+        return
+
     if message.channel.id == AI_CHANNEL_ID and not message.content.startswith('!'):
         reply_text = random.choice(GENERAL_RESPONSES)
         await message.reply(reply_text)
@@ -51,53 +91,27 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# ==================== 🎮 لوحة الألعاب (أمر /games) ====================
+# ==================== 🎮 أزرار الروليت ====================
 
-@bot.tree.command(name="games", description="لوحة الألعاب الترفيهية التفاعلية")
-async def games(interaction: discord.Interaction):
-    embed = discord.Embed(title="🎮 لوحة ألعاب FTN", description="اختر إحدى الألعاب التالية واستمتع:", color=discord.Color.blurple())
-    embed.add_field(name="حجر ورقة مقص", value="`/rps`", inline=True)
-    embed.add_field(name="تخمين الرقم", value="`/guess`", inline=True)
-    embed.set_footer(text="FTN-BOT Gaming System")
-    await interaction.response.send_message(embed=embed)
+class RouletteView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=30)
+        self.participants = []
 
-@bot.tree.command(name="rps", description="لعبة حجر ورقة مقص ضد البوت")
-@app_commands.choices(choice=[
-    app_commands.Choice(name="حجر", value="حجر"),
-    app_commands.Choice(name="ورقة", value="ورقة"),
-    app_commands.Choice(name="مقص", value="مقص")
-])
-async def rps(interaction: discord.Interaction, choice: str):
-    options = ["حجر", "ورقة", "مقص"]
-    bot_choice = random.choice(options)
-    
-    if choice == bot_choice:
-        result = "تعادل! 🤝"
-    elif (choice == "حجر" and bot_choice == "مقص") or \
-         (choice == "ورقة" and bot_choice == "حجر") or \
-         (choice == "مقص" and bot_choice == "ورقة"):
-        result = "مبروك، فزت علي! 🎉"
-    else:
-        result = "للأسف أنا فزت! هاردلك 🤖"
+    @discord.ui.button(label="انضمام للروليت 🎲", style=discord.ButtonStyle.green)
+    async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user in self.participants:
+            await interaction.response.send_message("❌ أنت مسجل مسبقاً في هذه اللعبة!", ephemeral=True)
+        else:
+            self.participants.append(interaction.user)
+            await interaction.response.send_message(f"✅ تم انضمامك بنجاح يا {interaction.user.mention}!", ephemeral=True)
 
-    embed = discord.Embed(title="🎮 حجر ورقة مقص - FTN", color=discord.Color.blurple())
-    embed.add_field(name="اختيارك", value=choice, inline=True)
-    embed.add_field(name="اختياري", value=bot_choice, inline=True)
-    embed.add_field(name="النتيجة", value=f"**{result}**", inline=False)
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="guess", description="لعبة تخمين الرقم من 1 إلى 10")
-async def guess(interaction: discord.Interaction, number: int):
-    if number < 1 or number > 10:
-        await interaction.response.send_message("❌ يا غالي اختر رقماً بين 1 و 10 فقط!", ephemeral=True)
-        return
-    secret = random.randint(1, 10)
-    msg = f"🎉 كفو! خمّنت الرقم الصحيح وهو **{secret}**!" if number == secret else f"❌ خطأ! الرقم الصحيح كان **{secret}**."
-    embed = discord.Embed(title="🎲 تحدي التخمين", description=msg, color=discord.Color.gold())
-    await interaction.response.send_message(embed=embed)
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
 
 
-# ==================== 🛡️ نظام الإدارة ====================
+# ==================== 🛡️ نظام الإدارة والأوامر ====================
 
 @bot.tree.command(name="clear", description="مسح عدد معين من الرسائل")
 @app_commands.default_permissions(manage_messages=True)
@@ -152,8 +166,8 @@ async def ping(interaction: discord.Interaction):
 
 @bot.tree.command(name="help", description="عرض جميع أوامر بوت FTN")
 async def help_cmd(interaction: discord.Interaction):
-    embed = discord.Embed(title="🌟 قائمة أوامر بوت FTN الشاملة", description="جميع الأوامر تعمل بنظام Slash Commands (/):", color=discord.Color.dark_embed())
-    embed.add_field(name="🎮 الألعاب", value="`/games` - `/rps` - `/guess`", inline=False)
+    embed = discord.Embed(title="🌟 قائمة أوامر بوت FTN الشاملة", description="جميع الأوامر تعمل بنظام Slash Commands (-) باستثناء الروليت الإداري:", color=discord.Color.dark_embed())
+    embed.add_field(name="🎮 الألعاب", value="`-روليت` (للإداريين) - `/games` - `/rps` - `/guess`", inline=False)
     embed.add_field(name="🛡️ الإدارة", value="`/clear` - `/lock` - `/unlock`", inline=False)
     embed.add_field(name="💰 الاقتصاد", value="`/balance` - `/daily`", inline=False)
     embed.add_field(name="👥 الأعضاء", value="`/ping` - `/help`", inline=False)
