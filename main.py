@@ -66,7 +66,7 @@ async def on_ready():
         auto_event_task.start()
 
 
-# ==================== 🌸 نظام الترحيب مع اختيار الإطارات وصورة العضو ====================
+# ==================== 🌸 نظام الترحيب مع دمج الإطارات الحقيقية وصورة العضو ====================
 @bot.event
 async def on_member_join(member: discord.Member):
     guild_id = member.guild.id
@@ -103,32 +103,46 @@ async def on_member_join(member: discord.Member):
     )
 
     try:
+        design_id = data.get("design", 2)
         avatar_asset = member.display_avatar.with_size(256)
         avatar_bytes = await avatar_asset.read()
-        
         avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
-        avatar_img = avatar_img.resize((140, 140))
 
-        mask = Image.new("L", (140, 140), 0)
-        draw_mask = ImageDraw.Draw(mask)
-        draw_mask.ellipse((0, 0, 140, 140), fill=255)
+        # مسار ملف الإطار الحقيقي (مثلاً frames/frame_2.png)
+        frame_path = f"frames/frame_{design_id}.png"
 
-        output_img = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
-        draw_frame = ImageDraw.Draw(output_img)
-        
-        # اختيار لون أو إطار حسب التصميم المحدد
-        design_id = data.get("design", 2)
-        if design_id == 3:
-            frame_color = (138, 43, 225, 255) # بنفسجي
-        elif design_id == 4:
-            frame_color = (220, 20, 60, 255)  # أحمر
-        elif design_id == 5:
-            frame_color = (0, 206, 209, 255)  # سماوي
+        if os.path.exists(frame_path):
+            # دمج الإطار الحقيقي الذي أرسلته
+            frame_img = Image.open(frame_path).convert("RGBA")
+            base_width, base_height = frame_img.size
+            
+            # تعديل حجم الأفاتار ليتناسب مع فتحة الإطار (يمكن ضبط المقاسات بحسب تصميمك)
+            avatar_size = 140
+            avatar_img = avatar_img.resize((avatar_size, avatar_size))
+
+            mask = Image.new("L", (avatar_size, avatar_size), 0)
+            draw_mask = ImageDraw.Draw(mask)
+            draw_mask.ellipse((0, 0, avatar_size, avatar_size), fill=255)
+
+            # دمج الأفاتار تحت الإطار (يتم تحديد الإحداثيات X و Y حسب مكان الدائرة في تصميمك)
+            output_img = Image.new("RGBA", (base_width, base_height), (0, 0, 0, 0))
+            
+            # إحداثيات افتراضية لتمركز الدائرة (يمكن تعديلها حسب موقع الفتحة في صورك)
+            pos_x = 50
+            pos_y = 50
+            output_img.paste(avatar_img, (pos_x, pos_y), mask=mask)
+            output_img.paste(frame_img, (0, 0), mask=frame_img)
         else:
-            frame_color = (255, 215, 0, 255)  # ذهبي افتراضي
+            # طريقة بديلة في حال لم تقم برفع صورة الإطار في مجلد frames بعد
+            avatar_img = avatar_img.resize((140, 140))
+            mask = Image.new("L", (140, 140), 0)
+            draw_mask = ImageDraw.Draw(mask)
+            draw_mask.ellipse((0, 0, 140, 140), fill=255)
 
-        draw_frame.ellipse((0, 0, 160, 160), fill=frame_color)
-        output_img.paste(avatar_img, (10, 10), mask=mask)
+            output_img = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
+            draw_frame = ImageDraw.Draw(output_img)
+            draw_frame.ellipse((0, 0, 160, 160), fill=(255, 215, 0, 255))
+            output_img.paste(avatar_img, (10, 10), mask=mask)
 
         buffer = io.BytesIO()
         output_img.save(buffer, format="PNG")
@@ -137,7 +151,7 @@ async def on_member_join(member: discord.Member):
         file = discord.File(buffer, filename="welcome_avatar.png")
 
         embed = discord.Embed(
-            title=f"✨ عضو جديد (التصميم #{design_id})",
+            title=f"✨ عضو جديد (إطار تصميم #{design_id})",
             description=formatted_msg,
             color=discord.Color.gold()
         )
@@ -179,7 +193,6 @@ async def on_message(message):
     elif mood == "ساخر":
         mood_prefix = "ههههه، عيوننا لك: "
 
-    # لعبة الروليت النصية للإداريين
     if message.content.startswith('-روليت') or message.content.startswith('-roulette'):
         if not message.author.guild_permissions.manage_guild:
             await message.reply("❌ عذراً يا غالي، هذا الأمر مخصص للإداريين فقط!", delete_after=5)
@@ -296,7 +309,6 @@ class RouletteView(discord.ui.View):
             child.disabled = True
 
 
-# لعبة من سيربح المليون
 class MillionaireView(discord.ui.View):
     def __init__(self, user_id):
         super().__init__(timeout=60)
@@ -343,7 +355,6 @@ class MillionaireView(discord.ui.View):
         await interaction.response.edit_message(embed=discord.Embed(title="❌ إجابة خاطئة!", description="انتهت اللعبة.", color=discord.Color.red()), view=None)
 
 
-# 10. لوحة التحكم للأزرار
 class ControlPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
@@ -361,7 +372,6 @@ class ControlPanelView(discord.ui.View):
         await interaction.response.send_message(f"💬 حماية السبام أصبحت: **{state}**", ephemeral=True)
 
 
-# 3. الاقتراحات
 class SuggestionView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -381,7 +391,6 @@ class SuggestionView(discord.ui.View):
         await interaction.response.edit_message(view=self)
 
 
-# تصويت عصابة أولد سكول
 class OldSchoolVoteView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
@@ -495,7 +504,7 @@ async def ban(interaction: discord.Interaction, العضو: discord.Member, ال
 bot.tree.add_command(ban)
 
 
-# 5. الترحيب واختيار الإطار
+# 5. الترحيب واختيار الإطار الحقيقي (من 2 إلى 10)
 @app_commands.command(name="تحديد_روم_الترحيب", description="تحديد روم الترحيب للأعضاء الجدد")
 @app_commands.default_permissions(manage_guild=True)
 async def set_welcome_channel(interaction: discord.Interaction, الروم: discord.TextChannel):
@@ -511,13 +520,18 @@ async def set_welcome_channel(interaction: discord.Interaction, الروم: disc
 bot.tree.add_command(set_welcome_channel)
 
 
-@app_commands.command(name="تحديد_إطار_الترحيب", description="اختر رقم تصميم الإطار (من 2 إلى 10)")
+@app_commands.command(name="تحديد_إطار_الترحيب", description="اختر تصميم إطار الترحيب (من 2 إلى 10)")
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.choices(رقم_التصميم=[
-    app_commands.Choice(name="تصميم 2 (ذهبي)", value=2),
-    app_commands.Choice(name="تصميم 3 (بنفسجي)", value=3),
-    app_commands.Choice(name="تصميم 4 (أحمر)", value=4),
-    app_commands.Choice(name="تصميم 5 (سماوي)", value=5)
+    app_commands.Choice(name="تصميم 2", value=2),
+    app_commands.Choice(name="تصميم 3", value=3),
+    app_commands.Choice(name="تصميم 4", value=4),
+    app_commands.Choice(name="تصميم 5", value=5),
+    app_commands.Choice(name="تصميم 6", value=6),
+    app_commands.Choice(name="تصميم 7", value=7),
+    app_commands.Choice(name="تصميم 8", value=8),
+    app_commands.Choice(name="تصميم 9", value=9),
+    app_commands.Choice(name="تصميم 10", value=10)
 ])
 async def set_welcome_design(interaction: discord.Interaction, رقم_التصميم: int):
     guild_id = interaction.guild.id
