@@ -276,7 +276,8 @@ async def set_welcome_design(interaction: discord.Interaction, رقم_التصم
     if guild_id not in welcome_settings:
         welcome_settings[guild_id] = {}
         
-   await interaction.response.send_message(f" تم تحديد تصميم الترحيب رقم : **{رقم_التصميم}** بنجاح .", ephemeral=True)
+await interaction.response.send_message(f"🎨 تم تحديد تصميم الترحيب رقم: **{رقم_التصميم}** بنجاح.", ephemeral=True)
+   
 
 
 # تشغيل البوت بأمان
