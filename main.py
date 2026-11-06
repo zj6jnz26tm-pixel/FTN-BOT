@@ -41,8 +41,8 @@ server_protections = {
     "anti_bots": False
 }
 
-# إعدادات الترحيب: {guild_id: {"channel_id": id, "message": "...", "autorole_id": id, "design": 2}}
-welcome_settings = {}
+welcome_settings = {} # {guild_id: {"channel_id": id, "message": "...", "autorole_id": id, "design": 2}}
+ticket_settings = {}  # {guild_id: {"role_id": id, "ask_reason": True}}
 admin_logs = {}
 user_message_timestamps = defaultdict(list)
 user_warnings = defaultdict(int)
@@ -66,12 +66,11 @@ async def on_ready():
         auto_event_task.start()
 
 
-# ==================== 🌸 نظام الترحيب مع دمج الإطارات الحقيقية وصورة العضو ====================
+# ==================== 🌸 نظام الترحيب مع دمج الإطارات الحقيقية ====================
 @bot.event
 async def on_member_join(member: discord.Member):
     guild_id = member.guild.id
     
-    # 7. إعطاء رتبة تلقائية عند الانضمام
     if guild_id in welcome_settings and "autorole_id" in welcome_settings[guild_id]:
         role_id = welcome_settings[guild_id]["autorole_id"]
         role = member.guild.get_role(role_id)
@@ -108,15 +107,11 @@ async def on_member_join(member: discord.Member):
         avatar_bytes = await avatar_asset.read()
         avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
 
-        # مسار ملف الإطار الحقيقي (مثلاً frames/frame_2.png)
         frame_path = f"frames/frame_{design_id}.png"
 
         if os.path.exists(frame_path):
-            # دمج الإطار الحقيقي الذي أرسلته
             frame_img = Image.open(frame_path).convert("RGBA")
             base_width, base_height = frame_img.size
-            
-            # تعديل حجم الأفاتار ليتناسب مع فتحة الإطار (يمكن ضبط المقاسات بحسب تصميمك)
             avatar_size = 140
             avatar_img = avatar_img.resize((avatar_size, avatar_size))
 
@@ -124,16 +119,12 @@ async def on_member_join(member: discord.Member):
             draw_mask = ImageDraw.Draw(mask)
             draw_mask.ellipse((0, 0, avatar_size, avatar_size), fill=255)
 
-            # دمج الأفاتار تحت الإطار (يتم تحديد الإحداثيات X و Y حسب مكان الدائرة في تصميمك)
             output_img = Image.new("RGBA", (base_width, base_height), (0, 0, 0, 0))
-            
-            # إحداثيات افتراضية لتمركز الدائرة (يمكن تعديلها حسب موقع الفتحة في صورك)
             pos_x = 50
             pos_y = 50
             output_img.paste(avatar_img, (pos_x, pos_y), mask=mask)
             output_img.paste(frame_img, (0, 0), mask=frame_img)
         else:
-            # طريقة بديلة في حال لم تقم برفع صورة الإطار في مجلد frames بعد
             avatar_img = avatar_img.resize((140, 140))
             mask = Image.new("L", (140, 140), 0)
             draw_mask = ImageDraw.Draw(mask)
@@ -164,7 +155,7 @@ async def on_member_join(member: discord.Member):
         print(f"Error in welcome event: {e}")
 
 
-# ==================== 💬 الرسائل والمستويات والمزاج والسبام ====================
+# ==================== 💬 الرسائل والمستويات والسبام ====================
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -172,7 +163,6 @@ async def on_message(message):
 
     uid = message.author.id
 
-    # 1. نظام مستويات XP
     user_xp[uid] += random.randint(5, 15)
     current_xp = user_xp[uid]
     next_level_xp = (user_level[uid] + 1) * 100
@@ -183,7 +173,6 @@ async def on_message(message):
         except:
             pass
 
-    # 13. نظام المزاج
     mood = user_mood[uid]
     mood_prefix = ""
     if mood == "رسمي":
@@ -201,7 +190,7 @@ async def on_message(message):
         view = RouletteView()
         embed = discord.Embed(
             title="🎰 سحب روليت Fynex",
-            description="سوف تبدأ لعبه روليت اضغط الزر للمشاركه ⏳ (لديك 30 ثانية)",
+            description="سوف تبدأ لعبة روليت اضغط الزر للمشاركة ⏳ (لديك 30 ثانية)",
             color=discord.Color.gold()
         )
         sent_msg = await message.channel.send(embed=embed, view=view)
@@ -270,7 +259,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-# ==================== 4. نظام الفعاليات التلقائية ====================
+# ==================== 4. الفعاليات التلقائية ====================
 @tasks.loop(minutes=45)
 async def auto_event_task():
     for guild in bot.guilds:
@@ -309,52 +298,62 @@ class RouletteView(discord.ui.View):
             child.disabled = True
 
 
+# لعبة من سيربح المليون (10 أسئلة دينية وسياسية)
 class MillionaireView(discord.ui.View):
     def __init__(self, user_id):
         super().__init__(timeout=60)
         self.user_id = user_id
-        self.question_step = 1
-
-    @discord.ui.button(label="أ) الرياض", style=discord.ButtonStyle.blurple)
-    async def choice_a(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            return await interaction.response.send_message("❌ هذه اللعبة ليست لك!", ephemeral=True)
+        self.step = 0
         
-        if self.question_step == 1:
-            embed = discord.Embed(title="🎮 من سيربح المليون - السؤال الثاني", description="ما هو أسرع حيوان بري؟\n\nأ) الأسد\nب) الفهد\nج) النمر\nد) الفيل", color=discord.Color.gold())
-            self.question_step = 2
-            button.label = "أ) الأسد"
-            self.children[1].label = "ب) الفهد"
-            self.children[2].label = "ج) النمر"
-            self.children[3].label = "د) الفيل"
-            await interaction.response.edit_message(embed=embed, view=self)
-        elif self.question_step == 2:
-            await interaction.response.edit_message(embed=discord.Embed(title="❌ إجابة خاطئة!", description="للأسف خسرت المسابقة!", color=discord.Color.red()), view=None)
+        # بنك الأسئلة الـ 10 (دينية وسياسية وتاريخية)
+        self.questions = [
+            ("كم عدد سور القرآن الكريم؟", ["114", "113", "120", "110"], 0),
+            ("في أي عام هجري كانت غزوة بدر الكبرى؟", ["السنة الأولى", "السنة الثانية", "السنة الثالثة", "السنة الرابعة"], 1),
+            ("من هو الصحابي الملقب بأسد الله؟", ["خالد بن الوليد", "حمزة بن عبدالمطلب", "علي بن أبي طالب", "عمر بن الخطاب"], 1),
+            ("ما هي الدولة التي تضم مقر جامعة الدول العربية الرئيسي؟", ["السعودية", "مصر", "الإمارات", "الأردن"], 1),
+            ("من هو أول من أسلم من الرجال؟", ["عمر بن الخطاب", "أبو بكر الصديق", "عثمان بن عفان", "علي بن أبي طالب"], 1),
+            ("كم عدد عقر قارات العالم الكبرى؟", ["5", "6", "7", "8"], 2),
+            ("في أي سنة هجرية وقع فتح مكة؟", ["السنة 6 هـ", "السنة 8 هـ", "السنة 9 هـ", "السنة 10 هـ"], 1),
+            ("ما هي الدولة التي تمتلك أكبر عدد من الحدود البرية مع دول أخرى؟", ["روسيا", "الصين", "البرازيل", "ألمانيا"], 1),
+            ("من هو خازن الجنة (الملك الموكل بالجنة)؟", ["مالك", "رضوان", "جبريل", "ميكائيل"], 1),
+            ("ما هي عاصمة دولة الاتحاد الأوروبي الإدارية والسياسية؟", ["برلين", "بروكسل", "باريس", "أمستردام"], 1)
+        ]
+        self.update_buttons()
 
-    @discord.ui.button(label="ب) جده", style=discord.ButtonStyle.blurple)
-    async def choice_b(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            return await interaction.response.send_message("❌ هذه اللعبة ليست لك!", ephemeral=True)
+    def update_buttons(self):
+        self.clear_items()
+        q_data = self.questions[self.step]
+        options = q_data[1]
         
-        if self.question_step == 1:
-            await interaction.response.edit_message(embed=discord.Embed(title="❌ إجابة خاطئة!", description="الإجابة الصحيحة كانت الرياض!", color=discord.Color.red()), view=None)
-        elif self.question_step == 2:
-            await interaction.response.edit_message(embed=discord.Embed(title="🏆 مبروك الفوز بالمليون!", description="لقد فزت بجائزة المليون عملة!", color=discord.Color.green()), view=None)
-            user_balances[self.user_id] = user_balances.get(self.user_id, 100) + 1000000
+        for idx, opt in enumerate(options):
+            btn = discord.ui.Button(label=f"{['أ', 'ب', 'ج', 'د'][idx]}) {opt}", style=discord.ButtonStyle.blurple, custom_id=f"opt_{idx}")
+            btn.callback = self.callback_factory(idx)
+            self.add_item(btn)
 
-    @discord.ui.button(label="ج) مكة", style=discord.ButtonStyle.blurple)
-    async def choice_c(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            return await interaction.response.send_message("❌ ليست لعبتك!", ephemeral=True)
-        await interaction.response.edit_message(embed=discord.Embed(title="❌ إجابة خاطئة!", description="انتهت اللعبة.", color=discord.Color.red()), view=None)
+    def callback_factory(self, idx):
+        async def button_callback(interaction: discord.Interaction):
+            if interaction.user.id != self.user_id:
+                return await interaction.response.send_message("❌ هذه اللعبة ليست لك!", ephemeral=True)
+            
+            correct_idx = self.questions[self.step][2]
+            if idx == correct_idx:
+                self.step += 1
+                if self.step >= len(self.questions):
+                    user_balances[self.user_id] = user_balances.get(self.user_id, 100) + 1000000
+                    embed = discord.Embed(title="🏆 مبروك الفوز بالمليون!", description="لقد أتممت جميع الأسئلة الـ 10 بنجاح وفزت بجائزة المليون!", color=discord.Color.green())
+                    await interaction.response.edit_message(embed=embed, view=None)
+                else:
+                    q_data = self.questions[self.step]
+                    embed = discord.Embed(title=f"🎮 من سيربح المليون - السؤال ({self.step + 1}/10)", description=q_data[0], color=discord.Color.gold())
+                    self.update_buttons()
+                    await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                embed = discord.Embed(title="❌ إجابة خاطئة!", description=f"للأسف خسرت المسابقة عند السؤال رقم {self.step + 1}.", color=discord.Color.red())
+                await interaction.response.edit_message(embed=embed, view=None)
+        return button_callback
 
-    @discord.ui.button(label="د) الدمام", style=discord.ButtonStyle.blurple)
-    async def choice_d(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            return await interaction.response.send_message("❌ ليست لعبتك!", ephemeral=True)
-        await interaction.response.edit_message(embed=discord.Embed(title="❌ إجابة خاطئة!", description="انتهت اللعبة.", color=discord.Color.red()), view=None)
 
-
+# لوحة التحكم بالأزرار
 class ControlPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
@@ -372,25 +371,43 @@ class ControlPanelView(discord.ui.View):
         await interaction.response.send_message(f"💬 حماية السبام أصبحت: **{state}**", ephemeral=True)
 
 
+# 3. الاقتراحات (منع تكرار التصويت لنفس الشخص)
 class SuggestionView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.yes = 0
-        self.no = 0
+        self.yes_voters = set()
+        self.no_voters = set()
 
-    @discord.ui.button(label="موافق 👍", style=discord.ButtonStyle.green, custom_id="yes_sug")
+    @discord.ui.button(label="موافق 👍 (0)", style=discord.ButtonStyle.green, custom_id="yes_sug")
     async def yes_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.yes += 1
-        button.label = f"موافق 👍 ({self.yes})"
+        uid = interaction.user.id
+        if uid in self.no_voters:
+            self.no_voters.remove(uid)
+        
+        if uid in self.yes_voters:
+            return await interaction.response.send_message("❌ لقد قمت بالتصويت بـ (موافق) مسبقاً ولا يمكنك التصويت مرتين!", ephemeral=True)
+        
+        self.yes_voters.add(uid)
+        self.children[0].label = f"موافق 👍 ({len(self.yes_voters)})"
+        self.children[1].label = f"غير موافق 👎 ({len(self.no_voters)})"
         await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(label="غير موافق 👎", style=discord.ButtonStyle.red, custom_id="no_sug")
+    @discord.ui.button(label="غير موافق 👎 (0)", style=discord.ButtonStyle.red, custom_id="no_sug")
     async def no_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.no += 1
-        button.label = f"غير موافق 👎 ({self.no})"
+        uid = interaction.user.id
+        if uid in self.yes_voters:
+            self.yes_voters.remove(uid)
+        
+        if uid in self.no_voters:
+            return await interaction.response.send_message("❌ لقد قمت بالتصويت بـ (غير موافق) مسبقاً!", ephemeral=True)
+        
+        self.no_voters.add(uid)
+        self.children[0].label = f"موافق 👍 ({len(self.yes_voters)})"
+        self.children[1].label = f"غير موافق 👎 ({len(self.no_voters)})"
         await interaction.response.edit_message(view=self)
 
 
+# تصويت عصابة أولد سكول
 class OldSchoolVoteView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
@@ -398,6 +415,98 @@ class OldSchoolVoteView(discord.ui.View):
     @discord.ui.button(label="👑 التصويت لأفضل إداري/عضو متفاعل", style=discord.ButtonStyle.blurple)
     async def vote_admin(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("🗳️ تم احتساب صوتك بنجاح ضمن فعاليات عصابة أولد سكول (Old School)!", ephemeral=True)
+
+
+# نظام التذاكر (Tickets)
+class TicketModal(discord.ui.Modal, title="فتح تذكرة جديدة"):
+    reason_input = discord.ui.TextInput(label="سبب فتح التذكرة", style=discord.TextStyle.paragraph, placeholder="اكتب سبب فتح التكت باختصار...", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        g_id = guild.id
+        reason = self.reason_input.value
+
+        role_id = ticket_settings.get(g_id, {}).get("role_id")
+        support_role = guild.get_role(role_id) if role_id else None
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        if support_role:
+            overwrites[support_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+        ticket_channel = await guild.create_text_channel(name=f"tkt-{interaction.user.name}", overwrites=overwrites)
+        
+        embed = discord.Embed(title="🎟️ تذكرة دعم فني جديدة", description=f"مرحباً بك {interaction.user.mention}!\n**السبب:** {reason}\n\nسيقوم طاقم الإدارة بالرد عليك قريباً.", color=discord.Color.green())
+        view = TicketCloseView()
+        await ticket_channel.send(embed=embed, view=view)
+        await interaction.response.send_message(f"✅ تم فتح تذكرتك بنجاح: {ticket_channel.mention}", ephemeral=True)
+
+
+class TicketCloseView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🔒 قفل/حذف التذكرة", style=discord.ButtonStyle.red, custom_id="close_tkt")
+    async def close_ticket_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(title="⚠️ إدارة التذكرة", description="ما الذي ترغب في فعله بهذه التذكرة؟", color=discord.Color.orange())
+        view = TicketActionConfirmView()
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+class TicketActionConfirmView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=30)
+
+    @discord.ui.button(label="🗑️ حذف التذكرة نهائياً", style=discord.ButtonStyle.red)
+    async def delete_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("🗑️ سيتم حذف التذكرة خلال **10 ثوانٍ**...", ephemeral=True)
+        import asyncio
+        await asyncio.sleep(10)
+        try:
+            await interaction.channel.delete()
+        except:
+            pass
+
+    @discord.ui.button(label="🔒 إغلاق التذكرة فقط (إخفاء)", style=discord.ButtonStyle.grey)
+    async def archive_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.channel.set_permissions(interaction.guild.default_role, read_messages=False)
+            await interaction.response.edit_message(content="🔒 تم إغلاق التذكرة وإخفاؤها عن الأعضاء بنجاح.", embed=None, view=None)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
+
+
+class TicketPanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🎫 فتح تذكرة دعم", style=discord.ButtonStyle.blurple, custom_id="open_tkt_panel")
+    async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        g_id = interaction.guild.id
+        ask_reason = ticket_settings.get(g_id, {}).get("ask_reason", True)
+
+        if ask_reason:
+            await interaction.response.send_modal(TicketModal())
+        else:
+            guild = interaction.guild
+            role_id = ticket_settings.get(g_id, {}).get("role_id")
+            support_role = guild.get_role(role_id) if role_id else None
+
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            }
+            if support_role:
+                overwrites[support_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+            ticket_channel = await guild.create_text_channel(name=f"tkt-{interaction.user.name}", overwrites=overwrites)
+            embed = discord.Embed(title="🎟️ تذكرة دعم فني جديدة", description=f"مرحباً بك {interaction.user.mention}!", color=discord.Color.green())
+            await ticket_channel.send(embed=embed, view=TicketCloseView())
+            await interaction.response.send_message(f"✅ تم فتح تذكرتك: {ticket_channel.mention}", ephemeral=True)
 
 
 # ==================== 🛠️ الأوامر باللغة العربية (Slash Commands) ====================
@@ -422,16 +531,31 @@ async def control_panel(interaction: discord.Interaction):
 bot.tree.add_command(control_panel)
 
 
-@app_commands.command(name="الحمايات", description="عرض حالة جميع الحمايات في السيرفر")
+# أوامر التذاكر (Tickets Setup)
+@app_commands.command(name="اعداد_التذاكر", description="إرسال لوحة (بانل) فتح التذاكر في الروم الحالي")
 @app_commands.default_permissions(manage_guild=True)
-async def protections(interaction: discord.Interaction):
-    links_status = "مفعل ✅" if server_protections["anti_links"] else "غير مفعل ❌"
-    spam_status = "مفعل ✅" if server_protections["anti_spam"] else "غير مفعل ❌"
-    embed = discord.Embed(title="🛡️ لوحة حمايات Fynex Bot", color=discord.Color.dark_red())
-    embed.add_field(name="🔗 حماية الروابط", value=links_status, inline=False)
-    embed.add_field(name="💬 حماية السبام", value=spam_status, inline=False)
-    await interaction.response.send_message(embed=embed)
-bot.tree.add_command(protections)
+@app_commands.choices(السؤال_عن_السبب=[
+    app_commands.Choice(name="نعم (اطلب السبب قبل الفتح)", value="yes"),
+    app_commands.Choice(name="لا (افتح التذكرة مباشرة)", value="no")
+])
+async def setup_tickets(interaction: discord.Interaction, رتبة_المشرفين: discord.Role, السؤال_عن_السبب: str):
+    g_id = interaction.guild.id
+    if g_id not in ticket_settings:
+        ticket_settings[g_id] = {}
+    
+    ticket_settings[g_id]["role_id"] = رتبة_المشرفين.id
+    ticket_settings[g_id]["ask_reason"] = True if السؤال_عن_السبب == "yes" else False
+
+    embed = discord.Embed(
+        title="🎫 مركز الدعم الفني والتذاكر",
+        description="إذا كنت بحاجة إلى مساعدة أو لديك استفسار، اضغط على الزر أدناه لفتح تذكرة خاصة مع الإدارة.",
+        color=discord.Color.blurple()
+    )
+    embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
+    
+    await interaction.channel.send(embed=embed, view=TicketPanelView())
+    await interaction.response.send_message("✅ تم إعداد ونشر بانل التذاكر بنجاح!", ephemeral=True)
+bot.tree.add_command(setup_tickets)
 
 
 @app_commands.command(name="مسح", description="مسح عدد معين من الرسائل")
@@ -504,7 +628,7 @@ async def ban(interaction: discord.Interaction, العضو: discord.Member, ال
 bot.tree.add_command(ban)
 
 
-# 5. الترحيب واختيار الإطار الحقيقي (من 2 إلى 10)
+# 5. الترحيب مع معاينة الإطار بصورة فعلية
 @app_commands.command(name="تحديد_روم_الترحيب", description="تحديد روم الترحيب للأعضاء الجدد")
 @app_commands.default_permissions(manage_guild=True)
 async def set_welcome_channel(interaction: discord.Interaction, الروم: discord.TextChannel):
@@ -520,7 +644,7 @@ async def set_welcome_channel(interaction: discord.Interaction, الروم: disc
 bot.tree.add_command(set_welcome_channel)
 
 
-@app_commands.command(name="تحديد_إطار_الترحيب", description="اختر تصميم إطار الترحيب (من 2 إلى 10)")
+@app_commands.command(name="تحديد_إطار_الترحيب", description="اختر إطار الترحيب مع معاينة التصميم مباشرة")
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.choices(رقم_التصميم=[
     app_commands.Choice(name="تصميم 2", value=2),
@@ -538,7 +662,15 @@ async def set_welcome_design(interaction: discord.Interaction, رقم_التصم
     if guild_id not in welcome_settings:
         welcome_settings[guild_id] = {}
     welcome_settings[guild_id]["design"] = رقم_التصميم
-    await interaction.response.send_message(f"🎨 تم اختيار تصميم إطار الترحيب رقم **{رقم_التصميم}** بنجاح!", ephemeral=True)
+
+    frame_path = f"frames/frame_{رقم_التصميم}.png"
+    if os.path.exists(frame_path):
+        file = discord.File(frame_path, filename=f"preview_{رقم_التصميم}.png")
+        embed = discord.Embed(title=f"🖼️ معاينة إطار الترحيب (تصميم #{رقم_التصميم})", description="هذا هو شكل الإطار الذي تم اعتماده للترحيب بالأعضاء الجدد:", color=discord.Color.gold())
+        embed.set_image(url=f"attachment://preview_{رقم_التصميم}.png")
+        await interaction.response.send_message(embed=embed, file=file, ephemeral=True)
+    else:
+        await interaction.response.send_message(f"🎨 تم اختيار تصميم إطار الترحيب رقم **{رقم_التصميم}** بنجاح! (ملاحظة: صورة الإطار غير مرفوعة في مجلد frames حالياً لعرض المعاينة البصرية).", ephemeral=True)
 bot.tree.add_command(set_welcome_design)
 
 
@@ -637,7 +769,7 @@ async def daily(interaction: discord.Interaction):
 bot.tree.add_command(daily)
 
 
-# 3. الاقتراحات
+# 3. الاقتراحات (تصويت فريد للمستخدم)
 @app_commands.command(name="اقتراح", description="إرسال اقتراح جديد للتصويت")
 async def suggest(interaction: discord.Interaction, الاقتراح: str):
     embed = discord.Embed(title="💡 اقتراح جديد", description=الاقتراح, color=discord.Color.purple())
@@ -661,11 +793,12 @@ async def oldschool_vote(interaction: discord.Interaction):
 bot.tree.add_command(oldschool_vote)
 
 
-# لعبة من سيربح المليون
-@app_commands.command(name="من_سيربح_المليون", description="لعبة من سيربح المليون التفاعلية بالأزرار")
+# لعبة من سيربح المليون (الأسئلة الـ 10 الدينية والسياسية)
+@app_commands.command(name="من_سيربح_المليون", description="لعبة من سيربح المليون (10 أسئلة دينية وسياسية)")
 async def millionaire(interaction: discord.Interaction):
-    embed = discord.Embed(title="🎮 مرحباً بك في لعبة من سيربح المليون!", description="السؤال الأول: ما هي عاصمة المملكة العربية السعودية؟\n\nأ) الرياض\nب) جده\nج) مكة\nد) الدمام", color=discord.Color.gold())
     view = MillionaireView(interaction.user.id)
+    q_data = view.questions[0]
+    embed = discord.Embed(title="🎮 من سيربح المليون - السؤال (1/10)", description=q_data[0], color=discord.Color.gold())
     await interaction.response.send_message(embed=embed, view=view)
 bot.tree.add_command(millionaire)
 
@@ -695,9 +828,9 @@ bot.tree.add_command(ping)
 async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🌟 قائمة أوامر Fynex Bot العربية", description="إذا لم تظهر الأوامر، اكتب `/تحديث_الأوامر`:", color=discord.Color.dark_embed())
     embed.add_field(name="⚙️ الأدوات الأساسية", value="`/تحديث_الأوامر` - `/إحصائيات_السيرفر` - `/بنق` - `/المساعدة`", inline=False)
-    embed.add_field(name="🛡️ الإدارة والحمايات", value="`/لوحة_التحكم` - `/الحمايات` - `/مسح` - `/قفل` - `/فتح` - `/تسجيل_دخول_الإدارة` - `/تسجيل_خروج_الإدارة`", inline=False)
+    embed.add_field(name="🛡️ الإدارة والتذاكر والحمايات", value="`/لوحة_التحكم` - `/اعداد_التذاكر` - `/الحمايات` - `/مسح` - `/قفل` - `/فتح`", inline=False)
     embed.add_field(name="🛠️ الإدارة الصوتية والكتابية", value="`/كتم_صوتي` - `/فك_الكتم_الصوتي` - `/تايم_آوت` - `/طرد` - `/حظر`", inline=False)
-    embed.add_field(name="🌸 الترحيب والإطارات", value="`/تحديد_روم_الترحيب` - `/تحديد_إطار_الترحيب` - `/تحديد_رسالة_الترحيب` - `/تحديد_الرتبة_التلقائية`", inline=False)
+    embed.add_field(name="🌸 الترحيب والمعاينة", value="`/تحديد_روم_الترحيب` - `/تحديد_إطار_الترحيب` - `/تحديد_رسالة_الترحيب` - `/تحديد_الرتبة_التلقائية`", inline=False)
     embed.add_field(name="📊 المستويات والاقتصاد", value="`/المستوى` - `/سمعة` - `/الرصيد` - `/يومي` - `/تحديد_المزاج`", inline=False)
     embed.add_field(name="💡 التفاعل والألعاب", value="`/اقتراح` - `/تصويت_أولد_سكول` - `/من_سيربح_المليون` - `-روليت`", inline=False)
     embed.set_footer(text="Fynex Bot Ultimate Arabic Edition")
