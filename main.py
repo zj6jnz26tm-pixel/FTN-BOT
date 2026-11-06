@@ -1,4 +1,3 @@
-
 import os
 import random
 import time
@@ -8,11 +7,11 @@ import io
 from PIL import Image, ImageOps, ImageDraw
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
+intents.members = True  # مهم جداً لكي يتم رصد دخول الأعضاء (on_member_join)
 
 class FynexBot(commands.Bot):
     def __init__(self):
@@ -28,14 +27,17 @@ class FynexBot(commands.Bot):
 bot = FynexBot()
 
 AI_CHANNEL_ID = 1567709659974860860
-GAMES_CHANNEL_ID = None  # يمكن تعيينه لاحقاً عبر أمر أو تركها عامة
 
-# ==================== قواعد البيانات المؤقتة ====================
+GENERAL_RESPONSES = [
+    "يا هلا! أنا معك، اسأل اللي بخاطرك وأنا أخوك في روم الـ AI ✨",
+    "صدقت! عاد علمنا، وش وديان السوالف اليوم في سيرفرنا؟",
+    "ممم.. نقطة مهمة! شاركنا تفاصيل أكثر عشان نفيدك أكثر يا غالي.",
+    "أنا حاضر وموجود طوال الوقت، تفضل اطرح سؤالك أو موضوعك!",
+    "الله يقويك! كيف أقدر أساعدك بهذا الخصوص؟",
+    "يا سلام عليك! اسأل اللي تبيه، كلنا كذا جاهزين لخدمتك."
+]
+
 user_balances = {}
-user_xp = defaultdict(int)
-user_level = defaultdict(int)
-user_rep = defaultdict(int)
-user_mood = defaultdict(lambda: "عادي") # مزاج البوت مع العضو
 
 server_protections = {
     "anti_links": True,
@@ -43,9 +45,8 @@ server_protections = {
     "anti_bots": False
 }
 
-welcome_settings = {} # {guild_id: {"channel_id": id, "message": "...", "autorole_id": id}}
-suggestion_settings = {} # {guild_id: channel_id}
-admin_logs = {} # {user_id: {"status": "مفعل", "time": ...}}
+# إعدادات الترحيب لكل سيرفر: {guild_id: {"channel_id": id, "message": "..."}}
+welcome_settings = {}
 
 user_message_timestamps = defaultdict(list)
 user_warnings = defaultdict(int)
@@ -58,25 +59,12 @@ MAX_WARNINGS = 3
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name} | Fynex Bot Online 🚀')
-    auto_event_task.start()
 
 
-# ==================== 🌸 نظام الترحيب والرتب التلقائية ====================
+# ==================== 🌸 نظام ترحيب الأعضاء الجدد ====================
 @bot.event
 async def on_member_join(member: discord.Member):
     guild_id = member.guild.id
-    
-    # 7. نظام إعطاء رتب تلقائية (Auto-Role)
-    if guild_id in welcome_settings and "autorole_id" in welcome_settings[guild_id]:
-        role_id = welcome_settings[guild_id]["autorole_id"]
-        role = member.guild.get_role(role_id)
-        if role:
-            try:
-                await member.add_roles(role)
-            except:
-                pass
-
-    # 5. نظام ترحيب بصورة العضو وإطار دائري
     if guild_id not in welcome_settings:
         return
     
@@ -91,6 +79,7 @@ async def on_member_join(member: discord.Member):
     if not channel:
         return
 
+    # معالجة النصوص المتغيرة في رسالة الترحيب
     formatted_msg = custom_msg.format(
         member=member.mention,
         name=member.name,
@@ -99,27 +88,36 @@ async def on_member_join(member: discord.Member):
     )
 
     try:
+        # تحميل صورة العضو وتعديلها لإضافة إطار دائري أنيق
         avatar_asset = member.display_avatar.with_size(256)
         avatar_bytes = await avatar_asset.read()
         
         avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
         avatar_img = avatar_img.resize((150, 150))
 
+        # إنشاء قناع دائري للصورة
         mask = Image.new("L", (150, 150), 0)
         draw_mask = ImageDraw.Draw(mask)
         draw_mask.ellipse((0, 0, 150, 150), fill=255)
 
+        # دمج الصورة مع الإطار الدائري
         output_img = Image.new("RGBA", (170, 170), (0, 0, 0, 0))
+        
+        # رسم إطار خارجي متوهج/ملون حول صورة العضو
         draw_frame = ImageDraw.Draw(output_img)
-        draw_frame.ellipse((0, 0, 170, 170), fill=(255, 215, 0, 255))
+        draw_frame.ellipse((0, 0, 170, 170), fill=(255, 215, 0, 255)) # لون إطار ذهبي
+        
+        # وضع الصورة الدائرية داخل الإطار
         output_img.paste(avatar_img, (10, 10), mask=mask)
 
+        # حفظ الصورة المؤقتة في الذاكرة
         buffer = io.BytesIO()
         output_img.save(buffer, format="PNG")
         buffer.seek(0)
 
         file = discord.File(buffer, filename="welcome_avatar.png")
 
+        # بناء الإمبد (Embed) الاحترافي
         embed = discord.Embed(
             title="✨ عضو جديد انضم إلينا!",
             description=formatted_msg,
@@ -134,32 +132,11 @@ async def on_member_join(member: discord.Member):
         print(f"Error in welcome event: {e}")
 
 
-# ==================== 💬 نظام الرسائل والمستويات والمزاج ====================
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    # 1. نظام مستويات XP
-    uid = message.author.id
-    user_xp[uid] += random.randint(5, 15)
-    current_xp = user_xp[uid]
-    next_level_xp = (user_level[uid] + 1) * 100
-    if current_xp >= next_level_xp:
-        user_level[uid] += 1
-        await message.channel.send(f"🎉 مبروك يا {message.author.mention}! لقد صعدت إلى المستوى **{user_level[uid]}** 🚀!")
-
-    # 13. نظام مزاج البوت: تغيير أسلوب الردود حسب شخصية العضو
-    mood = user_mood[uid]
-    mood_prefix = ""
-    if mood == "رسمي":
-        mood_prefix = "نظراً لطلبك، تفضل: "
-    elif mood == "حماسي":
-        mood_prefix = "يا وحش! 🔥 "
-    elif mood == "ساخر":
-        mood_prefix = "ههههه، عيوننا لك: "
-
-    # الأوامر النصية العادية (مثل -روليت)
     if message.content.startswith('-روليت') or message.content.startswith('-roulette'):
         if not message.author.guild_permissions.manage_guild:
             await message.reply("❌ عذراً يا غالي، هذا الأمر مخصص للإداريين فقط!", delete_after=5)
@@ -196,7 +173,6 @@ async def on_message(message):
         await sent_msg.edit(embed=win_embed, view=None)
         return
 
-    # حماية الروابط
     if server_protections["anti_links"] and ("http://" in message.content or "https://" in message.content):
         if not message.author.guild_permissions.manage_messages:
             try:
@@ -206,73 +182,54 @@ async def on_message(message):
                 pass
             return
 
-    # حماية السبام
     if server_protections["anti_spam"]:
         if not message.author.guild_permissions.manage_messages:
+            user_id = message.author.id
             current_time = time.time()
-            timestamps = user_message_timestamps[uid]
+            
+            timestamps = user_message_timestamps[user_id]
             timestamps = [t for t in timestamps if current_time - t < TIME_WINDOW]
             timestamps.append(current_time)
-            user_message_timestamps[uid] = timestamps
+            user_message_timestamps[user_id] = timestamps
             
             if len(timestamps) > SPAM_LIMIT:
                 try:
                     await message.delete()
-                except:
+                except discord.Forbidden:
                     pass
                 
-                user_warnings[uid] += 1
-                current_warnings = user_warnings[uid]
+                user_warnings[user_id] += 1
+                current_warnings = user_warnings[user_id]
                 
                 if current_warnings < MAX_WARNINGS:
                     try:
-                        warning_msg = await message.channel.send(f"⚠️ {message.author.mention}, يرجى التوقف عن السبام! ({current_warnings}/{MAX_WARNINGS})")
+                        warning_msg = await message.channel.send(
+                            f"⚠️ {message.author.mention}, يرجى التوقف عن السبام! (تحذير {current_warnings}/{MAX_WARNINGS})"
+                        )
                         await warning_msg.delete(delay=5.0)
                     except:
                         pass
                 else:
                     try:
-                        await message.author.timeout(timedelta(minutes=5), reason="سبام")
-                        await message.channel.send(f"🔇 تم كتم {message.author.mention} لمدة 5 دقائق بسبب السبام.", delete_after=7)
-                        user_warnings[uid] = 0
-                    except:
+                        await message.author.timeout(timedelta(minutes=5), reason="تجاوز حد التحذيرات للسبام")
+                        punish_msg = await message.channel.send(
+                            f"🔇 تم كتم العضو {message.author.mention} لمدة 5 دقائق بسبب استمرار السبام."
+                        )
+                        await punish_msg.delete(delay=7.0)
+                        user_warnings[user_id] = 0
+                    except discord.Forbidden:
                         pass
                 return
 
-    # الرد الآلي في روم الـ AI
     if message.channel.id == AI_CHANNEL_ID and not message.content.startswith('!'):
-        GENERAL_RESPONSES = [
-            "يا هلا! أنا معك، اسأل اللي بخاطرك وأنا أخوك في روم الـ AI ✨",
-            "صدقت! عاد علمنا، وش وديان السوالف اليوم في سيرفرنا؟",
-            "ممم.. نقطة مهمة! شاركنا تفاصيل أكثر عشان نفيدك أكثر يا غالي.",
-            "أنا حاضر وموجود طوال الوقت، تفضل اطرح سؤالك أو موضوعك!"
-        ]
-        reply_text = mood_prefix + random.choice(GENERAL_RESPONSES)
+        reply_text = random.choice(GENERAL_RESPONSES)
         await message.reply(reply_text)
         return
 
     await bot.process_commands(message)
 
+# ==================== 🎮 أزرار الروليت ====================
 
-# ==================== 🎮 نظام الفعاليات التلقائية ====================
-@tasks.loop(minutes=45)
-async def auto_event_task():
-    # يبحث عن أول روم نصي لإرسال الفعالية التلقائية (سؤال سرعة)
-    for guild in bot.guilds:
-        for channel in guild.text_channels:
-            if channel.permissions_for(guild.me).send_messages:
-                trivia_q = [
-                    ("ما هو عاصمة المملكة العربية السعودية؟", "الرياض"),
-                    ("كم عدد أركان الإسلام؟", "5"),
-                    ("ما هو أسرع حيوان بري في العالم؟", "الفهد")
-                ]
-                q, a = random.choice(trivia_q)
-                embed = discord.Embed(title="⚡ فعاليات Fynex التلقائية - سؤال سرعة!", description=f"**{q}**\n\nأول شخص يكتب الإجابة الصحيحة بالشات يفوز بنقاط وسفرة مالية!", color=discord.Color.purple())
-                await channel.send(embed=embed)
-                break
-
-
-# ==================== 🕹️ أزرار الألعاب والفعاليات ====================
 class RouletteView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=30)
@@ -281,7 +238,7 @@ class RouletteView(discord.ui.View):
     @discord.ui.button(label="انضمام للروليت 🎲", style=discord.ButtonStyle.green)
     async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user in self.participants:
-            await interaction.response.send_message("❌ أنت مسجل مسبقاً!", ephemeral=True)
+            await interaction.response.send_message("❌ أنت مسجل مسبقاً في هذه اللعبة!", ephemeral=True)
         else:
             self.participants.append(interaction.user)
             await interaction.response.send_message(f"✅ تم انضمامك بنجاح يا {interaction.user.mention}!", ephemeral=True)
@@ -291,228 +248,192 @@ class RouletteView(discord.ui.View):
             child.disabled = True
 
 
-# ==================== 💰 لعبة من سيربح المليون ====================
-class MillionaireView(discord.ui.View):
-    def __init__(self, user_id):
-        super().__init__(timeout=60)
-        self.user_id = user_id
-        self.question_step = 1
+# ==================== 🛡️ نظام الحمايات والإدارة ====================
 
-    @discord.ui.button(label="أ) الرياض", style=discord.ButtonStyle.blurple)
-    async def choice_a(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            return await interaction.response.send_message("❌ هذه اللعبة ليست لك!", ephemeral=True)
-        
-        if self.question_step == 1:
-            embed = discord.Embed(title="🎮 من سيربح المليون - السؤال الثاني", description="ما هو أسرع حيوان بري؟\n\nأ) الأسد\nب) الفهد (Correct)\nج) النمر\nد) الفيل", color=discord.Color.gold())
-            self.question_step = 2
-            # تعديل الأزرار للسؤال الثاني
-            button.label = "أ) الأسد"
-            self.children[1].label = "ب) الفهد"
-            self.children[2].label = "ج) النمر"
-            self.children[3].label = "د) الفيل"
-            await interaction.response.edit_message(embed=embed, view=self)
-        elif self.question_step == 2:
-            # إجابة خاطئة للسؤال الثاني لو اختار أ
-            await interaction.response.edit_message(embed=discord.Embed(title="❌ إجابة خاطئة!", description="للأسف خَسِرت المسابقة، حاول مرة أخرى!", color=discord.Color.red()), view=None)
-
-    @discord.ui.button(label="ب) جده", style=discord.ButtonStyle.blurple)
-    async def choice_b(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            return await interaction.response.send_message("❌ هذه اللعبة ليست لك!", ephemeral=True)
-        
-        if self.question_step == 1:
-            await interaction.response.edit_message(embed=discord.Embed(title="❌ إجابة خاطئة!", description="الإجابة الصحيحة كانت الرياض!", color=discord.Color.red()), view=None)
-        elif self.question_step == 2:
-            # إجابة صحيحة للسؤال الثاني (الفهد)
-            await interaction.response.edit_message(embed=discord.Embed(title="🏆 مبروك الفوز بالمليون!", description="لقد أزلت كل الأسئلة بنجاح وفزت بجائزة المليون عملة في Fynex!", color=discord.Color.green()), view=None)
-            user_balances[self.user_id] = user_balances.get(self.user_id, 100) + 1000000
-
-    @discord.ui.button(label="ج) مكة", style=discord.ButtonStyle.blurple)
-    async def choice_c(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            return await interaction.response.send_message("❌ ليست لعبتك!", ephemeral=True)
-        await interaction.response.edit_message(embed=discord.Embed(title="❌ إجابة خاطئة!", description="انتهت اللعبة.", color=discord.Color.red()), view=None)
-
-    @discord.ui.button(label="د) الدمام", style=discord.ButtonStyle.blurple)
-    async def choice_d(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            return await interaction.response.send_message("❌ ليست لعبتك!", ephemeral=True)
-        await interaction.response.edit_message(embed=discord.Embed(title="❌ إجابة خاطئة!", description="انتهت اللعبة.", color=discord.Color.red()), view=None)
-
-
-# ==================== 🛠️ لوحة التحكم بالأزرار (Dashboard) ====================
-class ControlPanelView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=120)
-
-    @discord.ui.button(label="🛡️ تفعيل/تعطيل الروابط", style=discord.ButtonStyle.grey)
-    async def toggle_links(self, interaction: discord.Interaction, button: discord.ui.Button):
-        server_protections["anti_links"] = not server_protections["anti_links"]
-        state = "مفعل ✅" if server_protections["anti_links"] else "مغلق ❌"
-        await interaction.response.send_message(f"🔗 أصبحت حماية الروابط الآن: **{state}**", ephemeral=True)
-
-    @discord.ui.button(label="💬 تفعيل/تعطيل السبام", style=discord.ButtonStyle.grey)
-    async def toggle_spam(self, interaction: discord.Interaction, button: discord.ui.Button):
-        server_protections["anti_spam"] = not server_protections["anti_spam"]
-        state = "مفعل ✅" if server_protections["anti_spam"] else "مغلق ❌"
-        await interaction.response.send_message(f"💬 أصبحت حماية السبام الآن: **{state}**", ephemeral=True)
-
-
-# ==================== ⚙️ الأوامر والأنظمة الجديدة ====================
-
-@bot.tree.command(name="control_panel", description="10. لوحة تحكم البوت باستخدام الأزرار")
+@bot.tree.command(name="protections", description="عرض حالة جميع الحمايات في السيرفر")
 @app_commands.default_permissions(manage_guild=True)
-async def control_panel(interaction: discord.Interaction):
-    embed = discord.Embed(title="🎛️ لوحة تحكم Fynex Bot السريعة", description="استخدم الأزرار أدناه للتحكم بإعدادات السيرفر الفورية:", color=discord.Color.blue())
-    view = ControlPanelView()
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+async def protections(interaction: discord.Interaction):
+    links_status = "مفعل ✅" if server_protections["anti_links"] else "غير مفعل ❌"
+    spam_status = "مفعل ✅" if server_protections["anti_spam"] else "غير مفعل ❌"
+    bots_status = "مفعل ✅" if server_protections["anti_bots"] else "غير مفعل ❌"
 
+    embed = discord.Embed(title="🛡️ لوحة حمايات Fynex Bot", description="حالة الحمايات الحالية في السيرفر:", color=discord.Color.dark_red())
+    embed.add_field(name="🔗 حماية الروابط (anti_links)", value=links_status, inline=False)
+    embed.add_field(name="💬 حماية السبام (anti_spam)", value=spam_status, inline=False)
+    embed.add_field(name="🤖 حماية البوتات (anti_bots)", value=bots_status, inline=False)
+    embed.set_footer(text="لتغيير الحالة استخدم أمر /toggle_protection")
+    await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="rank", description="1. عرض مستواك ونقاط الـ XP الحالية")
-async def rank(interaction: discord.Interaction, member: discord.Member = None):
-    target = member or interaction.user
-    uid = target.id
-    embed = discord.Embed(title=f"📊 رتبة ومستوى {target.name}", color=discord.Color.blurple())
-    embed.add_field(name="⭐ المستوى", value=str(user_level[uid]), inline=True)
-    embed.add_field(name="✨ نقاط الخبرة (XP)", value=str(user_xp[uid]), inline=True)
-    embed.set_thumbnail(url=target.display_avatar.url)
+@bot.tree.command(name="toggle_protection", description="تفعيل أو تعطيل حماية معينة")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.choices(protection=[
+    app_commands.Choice(name="حماية الروابط (anti_links)", value="anti_links"),
+    app_commands.Choice(name="حماية السبام (anti_spam)", value="anti_spam"),
+    app_commands.Choice(name="حماية البوتات (anti_bots)", value="anti_bots")
+], status=[
+    app_commands.Choice(name="تفعيل (On)", value="on"),
+    app_commands.Choice(name="تعطيل (Off)", value="off")
+])
+async def toggle_protection(interaction: discord.Interaction, protection: str, status: str):
+    is_on = True if status == "on" else False
+    server_protections[protection] = is_on
+    
+    state_text = "تفعيلها ✅" if is_on else "تعطيلها ❌"
+    embed = discord.Embed(title="🛡️ تحديث نظام الحماية", description=f"تم **{state_text}** بنجاح للحماية المطلوبة.", color=discord.Color.green() if is_on else discord.Color.red())
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="clear", description="مسح عدد معين من الرسائل")
+@app_commands.default_permissions(manage_messages=True)
+async def clear(interaction: discord.Interaction, amount: int):
+    if amount < 1 or amount > 100:
+        await interaction.response.send_message("❌ حدد بين 1 و 100.", ephemeral=True)
+        return
+    await interaction.channel.purge(limit=amount)
+    embed = discord.Embed(title="🛡️ مسح الرسائل", description=f"تم مسح **{amount}** رسالة بنجاح.", color=discord.Color.green())
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="lock", description="قفل الروم الحالي")
+@app_commands.default_permissions(manage_channels=True)
+async def lock(interaction: discord.Interaction):
+    await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=False)
+    embed = discord.Embed(title="🔒 قفل الروم", description="تم قفل الروم بنجاح.", color=discord.Color.dark_red())
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="unlock", description="فتح الروم الحالي")
+@app_commands.default_permissions(manage_channels=True)
+async def unlock(interaction: discord.Interaction):
+    await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=True)
+    embed = discord.Embed(title="🔓 فتح الروم", description="تم فتح الروم بنجاح.", color=discord.Color.green())
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="rep", description="2. إعطاء نقطة سمعة لعضو متميز")
-async def rep(interaction: discord.Interaction, member: discord.Member):
-    if member.id == interaction.user.id:
-        return await interaction.response.send_message("❌ لا يمكنك إعطاء سمعة لنفسك!", ephemeral=True)
-    user_rep[member.id] += 1
-    embed = discord.Embed(title="⭐ نقاط السمعة", description=f"تم إعطاء نقطة سمعة بنجاح إلى {member.mention}! إجمالي سمعته: **{user_rep[member.id]}**", color=discord.Color.gold())
-    await interaction.response.send_message(embed=embed)
+# ==================== 🌸 أوامر إعدادات الترحيب ====================
 
-
-# 3. نظام اقتراحات مع تصويت
-class SuggestionView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.yes = 0
-        self.no = 0
-
-    @discord.ui.button(label="موافق 👍", style=discord.ButtonStyle.green, custom_id="yes_sug")
-    async def yes_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.yes += 1
-        button.label = f"موافق 👍 ({self.yes})"
-        await interaction.response.edit_message(view=self)
-
-    @discord.ui.button(label="غير موافق 👎", style=discord.ButtonStyle.red, custom_id="no_sug")
-    async def no_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.no += 1
-        button.label = f"غير موافق 👎 ({self.no})"
-        await interaction.response.edit_message(view=self)
-
-@bot.tree.command(name="suggest", description="3. إرسال اقتراح جديد للتصويت عليه")
-async def suggest(interaction: discord.Interaction, اقتراحك: str):
-    embed = discord.Embed(title="💡 اقتراح جديد", description=اقتراحك, color=discord.Color.purple())
-    embed.set_footer(text=f"صاحب الاقتراح: {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
-    view = SuggestionView()
-    await interaction.response.send_message("✅ تم نشر اقتراحك بنجاح للتصويت!", ephemeral=True)
-    await interaction.channel.send(embed=embed, view=view)
-
-
-# 6. نظام تسجيل دخول وخروج الإدارة
-@bot.tree.command(name="admin_login", description="6. تسجيل دخول الإدارة للدوام")
+@bot.tree.command(name="set_welcome_channel", description="تحديد روم الترحيب بالأعضاء الجدد")
 @app_commands.default_permissions(manage_guild=True)
-async def admin_login(interaction: discord.Interaction):
-    uid = interaction.user.id
-    admin_logs[uid] = {"status": "متواجد", "time": time.time()}
-    embed = discord.Embed(title="🟢 تسجيل دخول إداري", description=f"تم تسجيل دخول المشرف {interaction.user.mention} لمباشرة المهام.", color=discord.Color.green())
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="admin_logout", description="6. تسجيل خروج الإدارة من الدوام")
-@app_commands.default_permissions(manage_guild=True)
-async def admin_logout(interaction: discord.Interaction):
-    uid = interaction.user.id
-    if uid in admin_logs:
-        del admin_logs[uid]
-    embed = discord.Embed(title="🔴 تسجيل خروج إداري", description=f"تم تسجيل خروج المشرف {interaction.user.mention} من الدوام.", color=discord.Color.red())
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="set_autorole", description="7. تحديد الرتبة التلقائية للأعضاء الجدد")
-@app_commands.default_permissions(manage_guild=True)
-async def set_autorole(interaction: discord.Interaction, role: discord.Role):
+async def set_welcome_channel(interaction: discord.Interaction, channel: discord.TextChannel):
     guild_id = interaction.guild.id
     if guild_id not in welcome_settings:
         welcome_settings[guild_id] = {}
-    welcome_settings[guild_id]["autorole_id"] = role.id
-    embed = discord.Embed(title="✅ تم ضبط الرتبة التلقائية", description=f"سيتم منح الأعضاء الجدد رتبة: {role.mention}", color=discord.Color.green())
+    
+    welcome_settings[guild_id]["channel_id"] = channel.id
+    if "message" not in welcome_settings[guild_id]:
+        welcome_settings[guild_id]["message"] = "أهلاً بك يا {member} في سيرفر **{server}**! نتمنى لك إقامة ممتعة معنا 🌹"
+
+    embed = discord.Embed(title="✅ تم تحديد روم الترحيب", description=f"تم ربط روم الترحيب بنجاح في: {channel.mention}", color=discord.Color.green())
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+@bot.tree.command(name="set_welcome_message", description="تخصيص رسالة الترحيب بالعضو الجديد")
+@app_commands.default_permissions(manage_guild=True)
+async def set_welcome_message(interaction: discord.Interaction, message: str):
+    guild_id = interaction.guild.id
+    if guild_id not in welcome_settings:
+        welcome_settings[guild_id] = {"channel_id": None}
+    
+    welcome_settings[guild_id]["message"] = message
 
-# 8. نظام ألعاب داخل روم محدد
-@bot.tree.command(name="millionaire", description="لعبة من سيربح المليون الاحترافية")
-async def millionaire(interaction: discord.Interaction):
-    embed = discord.Embed(title="🎮 مرحباً بك في لعبة من سيربح المليون!", description="السؤال الأول: ما هي عاصمة المملكة العربية السعودية؟\n\nأ) الرياض\nب) جده\nج) مكة\nد) الدمام", color=discord.Color.gold())
-    view = MillionaireView(interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view)
-
-
-# 9. نظام إحصائيات السيرفر
-@bot.tree.command(name="stats", description="9. عرض إحصائيات السيرفر الشاملة")
-async def stats(interaction: discord.Interaction):
-    guild = interaction.guild
-    embed = discord.Embed(title=f"📈 إحصائيات سيرفر {guild.name}", color=discord.Color.dark_blue())
-    embed.add_field(name="👥 إجمالي الأعضاء", value=str(guild.member_count), inline=True)
-    embed.add_field(name="💬 رومات الشات والصوت", value=str(len(guild.channels)), inline=True)
-    embed.add_field(name="🛡️ رتب السيرفر", value=str(len(guild.roles)), inline=True)
-    embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
-    await interaction.response.send_message(embed=embed)
-
-
-# أمر تصويت خاص لعصابة أولد سكول (Old School)
-class OldSchoolVoteView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=60)
-        self.votes = defaultdict(int)
-
-    @discord.ui.button(label="👑 التصويت لأفضل إداري", style=discord.ButtonStyle.blurple)
-    async def vote_admin(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("🗳️ تم احتساب صوتك ضمن فعاليات عصابة أولد سكول للأفضل!", ephemeral=True)
-
-@bot.tree.command(name="oldschool_vote", description="تصويت خاص لعصابة أولد سكول لأفضل إداري أو عضو")
-async def oldschool_vote(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="🏴‍☠️ تصويت عصابة أولد سكول (Old School)",
-        description="صوّت الآن لاختيار أفضل إداري أو عضو متفاعل داخل عصابة Old School الرسمية! 🏆",
-        color=discord.Color.dark_red()
+        title="✨ تم تحديث رسالة الترحيب",
+        description=f"الرسالة الجديدة:\n> {message}\n\n*ملاحظة: يمكنك استخدام `{member}` لمنشن العضو و `{server}` لاسم السيرفر.*",
+        color=discord.Color.green()
     )
-    view = OldSchoolVoteView()
-    await interaction.response.send_message(embed=embed, view=view)
-
-
-# 13. نظام تغيير المزاج
-@bot.tree.command(name="set_mood", description="13. تغيير أسلوب ردود البوت معك (رسمي، حماسي، ساخر، عادي)")
-@app_commands.choices(mood=[
-    app_commands.Choice(name="عادي", value="عادي"),
-    app_commands.Choice(name="رسمي", value="رسمي"),
-    app_commands.Choice(name="حماسي", value="حماسي"),
-    app_commands.Choice(name="ساخر", value="ساخر")
-])
-async def set_mood(interaction: discord.Interaction, mood: str):
-    user_mood[interaction.user.id] = mood
-    embed = discord.Embed(title="✨ تحديث المزاج", description=لأصدقائي، تم ضبط أسلوب ردودي معك إلى: **{mood}**", color=discord.Color.green())
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-# تحديث أمر Help ليشمل الأوامر الجديدة
-@bot.tree.command(name="help", description="عرض جميع أوامر Fynex Bot المحدثة")
-async def help_cmd(interaction: discord.Interaction):
-    embed = discord.Embed(title="🌟 قائمة أوامر Fynex Bot الشاملة", description="جميع الأنظمة والخصائص المضافة بنجاح:", color=discord.Color.dark_embed())
-    embed.add_field(name="📊 المستويات والسمعة", value="`/rank` - `/rep`", inline=False)
-    embed.add_field(name="💡 التفاعل والاقتراحات", value="`/suggest` - `/oldschool_vote` - `/set_mood`", inline=False)
-    embed.add_field(name="🎮 الألعاب والفعاليات", value="`/millionaire` - `-روليت`", inline=False)
-    embed.add_field(name="🛡️ الإدارة والحمايات", value="`/control_panel` - `/admin_login` - `/admin_logout` - `/set_autorole`", inline=False)
-    embed.add_field(name="🌸 الترحيب والإحصائيات", value="`/set_welcome_channel` - `/set_welcome_message` - `/stats`", inline=False)
-    embed.set_footer(text="Fynex Bot Ultimate Elite Version")
+# ==================== 🛠️ الأوامر الإدارية ====================
+
+@bot.tree.command(name="mute", description="كتم العضو في الروم الصوتي")
+@app_commands.default_permissions(mute_members=True)
+async def mute(interaction: discord.Interaction, member: discord.Member, reason: str = "بدون سبب"):
+    if not member.voice:
+        await interaction.response.send_message("❌ العضو ليس في روم صوتي حالياً!", ephemeral=True)
+        return
+    await member.edit(mute=True, reason=reason)
+    await interaction.response.send_message(f"🔇 تم كتم العضو {member.mention} صوتياً بنجاح.", ephemeral=True)
+
+@bot.tree.command(name="unmute", description="إلغاء الكتم الصوتي عن العضو")
+@app_commands.default_permissions(mute_members=True)
+async def unmute(interaction: discord.Interaction, member: discord.Member):
+    if not member.voice:
+        await interaction.response.send_message("❌ العضو ليس في روم صوتي حالياً!", ephemeral=True)
+        return
+    await member.edit(mute=False)
+    await interaction.response.send_message(f"🔊 تم إلغاء الكتم الصوتي عن العضو {member.mention}.", ephemeral=True)
+
+@bot.tree.command(name="move", description="نقل عضو إلى روم صوتي آخر")
+@app_commands.default_permissions(move_members=True)
+async def move(interaction: discord.Interaction, member: discord.Member, channel: discord.VoiceChannel):
+    if not member.voice:
+        await interaction.response.send_message("❌ العضو ليس متصلاً بأي روم صوتي!", ephemeral=True)
+        return
+    await member.move_to(channel)
+    await interaction.response.send_message(f"🔀 تم نقل العضو {member.mention} إلى الروم {channel.mention}.", ephemeral=True)
+
+@bot.tree.command(name="deafen", description="إصمام (Deafen) العضو في الروم الصوتي")
+@app_commands.default_permissions(deafen_members=True)
+async def deafen(interaction: discord.Interaction, member: discord.Member, reason: str = "بدون سبب"):
+    if not member.voice:
+        await interaction.response.send_message("❌ العضو ليس في روم صوتي حالياً!", ephemeral=True)
+        return
+    await member.edit(deafen=True, reason=reason)
+    await interaction.response.send_message(f"🔇 تم إصمام العضو {member.mention} بنجاح.", ephemeral=True)
+
+@bot.tree.command(name="timeout", description="إعطاء تايم آوت (ميوت كتابي) لعضو لفترة معينة")
+@app_commands.default_permissions(moderate_members=True)
+async def timeout(interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str = "بدون سبب"):
+    duration = timedelta(minutes=minutes)
+    await member.timeout(duration, reason=reason)
+    await interaction.response.send_message(f"⏳ تم إعطاء تايم آوت للعضو {member.mention} لمدة {minutes} دقيقة.", ephemeral=True)
+
+@bot.tree.command(name="kick", description="طرد عضو من السيرفر (للإدارة العليا)")
+@app_commands.default_permissions(kick_members=True)
+async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "بدون سبب"):
+    await member.kick(reason=reason)
+    await interaction.response.send_message(f"👢 تم طرد العضو {member.mention} من السيرفر بنجاح.", ephemeral=True)
+
+@bot.tree.command(name="ban", description="حظر عضو من السيرفر نهائياً (للإدارة العليا)")
+@app_commands.default_permissions(ban_members=True)
+async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "بدون سبب"):
+    await member.ban(reason=reason)
+    await interaction.response.send_message(f"🔨 تم حظر العضو {member.mention} من السيرفر بنجاح.", ephemeral=True)
+
+
+# ==================== 💰 نظام الاقتصاد ====================
+
+@bot.tree.command(name="balance", description="عرض رصيدك من العملات")
+async def balance(interaction: discord.Interaction):
+    uid = interaction.user.id
+    bal = user_balances.get(uid, 100)
+    embed = discord.Embed(title="💰 رصيدك المالي", description=f"لديك **{bal}** عملة في محفظتك 🪙", color=discord.Color.gold())
     await interaction.response.send_message(embed=embed)
 
+@bot.tree.command(name="daily", description="استلام المكافأة اليومية")
+async def daily(interaction: discord.Interaction):
+    uid = interaction.user.id
+    current = user_balances.get(uid, 100)
+    user_balances[uid] = current + 500
+    embed = discord.Embed(title="🎁 المكافأة اليومية", description="تم إضافة **500** عملة إلى رصيدك بنجاح! 💸", color=discord.Color.green())
+    await interaction.response.send_message(embed=embed)
+
+
+# ==================== 👥 الأعضاء والمساعدة ====================
+
+@bot.tree.command(name="ping", description="عرض سرعة استجابة Fynex Bot")
+async def ping(interaction: discord.Interaction):
+    latency = round(bot.latency * 1000)
+    embed = discord.Embed(title="🏓 سرعة استجابة Fynex Bot", description=f"⚡ السرعة: **{latency}ms**", color=discord.Color.green())
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="help", description="عرض جميع أوامر Fynex Bot")
+async def help_cmd(interaction: discord.Interaction):
+    embed = discord.Embed(title="🌟 قائمة أوامر Fynex Bot الشاملة", description="جميع الأوامر تعمل بنظام Slash Commands:", color=discord.Color.dark_embed())
+    embed.add_field(name="🌸 الترحيب", value="`/set_welcome_channel` - `/set_welcome_message`", inline=False)
+    embed.add_field(name="🎮 الألعاب", value="`-روليت` (للإداريين)", inline=False)
+    embed.add_field(name="🛡️ الإدارة والحمايات", value="`/protections` - `/toggle_protection` - `/clear` - `/lock` - `/unlock`", inline=False)
+    embed.add_field(name="🛠️ الإدارة الصوتية والكتابية", value="`/mute` - `/unmute` - `/move` - `/deafen` - `/timeout`", inline=False)
+    embed.add_field(name="⚖️ الرتب العليا (الإدارة العليا)", value="`/kick` - `/ban`", inline=False)
+    embed.add_field(name="💰 الاقتصاد والأعضاء", value="`/balance` - `/daily` - `/ping` - `/help`", inline=False)
+    embed.set_footer(text="Fynex Bot Ultimate System")
+    await interaction.response.send_message(embed=embed)
 
 bot.run(os.getenv('TOKEN'))
