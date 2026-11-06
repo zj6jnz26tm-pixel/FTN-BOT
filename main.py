@@ -41,8 +41,8 @@ server_protections = {
     "anti_bots": False
 }
 
-welcome_settings = {} # {guild_id: {"channel_id": id, "message": "...", "autorole_id": id, "design": 2}}
-ticket_settings = {}  # {guild_id: {"role_id": id, "ask_reason": True}}
+welcome_settings = {}
+ticket_settings = {}
 admin_logs = {}
 user_message_timestamps = defaultdict(list)
 user_warnings = defaultdict(int)
@@ -56,6 +56,25 @@ GENERAL_RESPONSES = [
     "صدقت! عاد علمنا، وش وديان السوالف اليوم في سيرفرنا؟",
     "ممم.. نقطة مهمة! شاركنا تفاصيل أكثر عشان نفيدك أكثر يا غالي.",
     "أنا حاضر وموجود طوال الوقت، تفضل اطرح سؤالك أو موضوعك!"
+]
+
+# بنك أسئلة من سيربح المليون المتنوع والمتجدد عشوائياً (دينية وسياسية وتاريخية)
+QUESTION_BANK = [
+    ("كم عدد سور القرآن الكريم؟", ["114", "113", "120", "110"], 0),
+    ("في أي عام هجري كانت غزوة بدر الكبرى؟", ["السنة الأولى", "السنة الثانية", "السنة الثالثة", "السنة الرابعة"], 1),
+    ("من هو الصحابي الملقب بأسد الله؟", ["خالد بن الوليد", "حمزة بن عبدالمطلب", "علي بن أبي طالب", "عمر بن الخطاب"], 1),
+    ("ما هي الدولة التي تضم مقر جامعة الدول العربية الرئيسي؟", ["السعودية", "مصر", "الإمارات", "الأردن"], 1),
+    ("من هو أول من أسلم من الرجال؟", ["عمر بن الخطاب", "أبو بكر الصديق", "عثمان بن عفان", "علي بن أبي طالب"], 1),
+    ("كم عدد قارات العالم الكبرى؟", ["5", "6", "7", "8"], 2),
+    ("في أي سنة هجرية وقع فتح مكة؟", ["السنة 6 هـ", "السنة 8 هـ", "السنة 9 هـ", "السنة 10 هـ"], 1),
+    ("ما هي الدولة التي تمتلك أكبر عدد من الحدود البرية مع دول أخرى؟", ["روسيا", "الصين", "البرازيل", "ألمانيا"], 1),
+    ("من هو خازن الجنة (الملك الموكل بالجنة)؟", ["مالك", "رضوان", "جبريل", "ميكائيل"], 1),
+    ("ما هي عاصمة دولة الاتحاد الأوروبي الإدارية والسياسية؟", ["برلين", "بروكسل", "باريس", "أمستردام"], 1),
+    ("ما هي أول عاصمة للدولة الإسلامية في عهد النبي صلى الله عليه وسلم؟", ["مكة المكرمة", "المدينة المنورة", "القدس", "دمشق"], 1),
+    ("في أي معركة استشهد الصحابي جعفر بن أبي طالب رضي الله عنه؟", ["ؤتة", "اليرموك", "قادسيّة", "حنين"], 0),
+    ("من هو وزير الخارجية الأمريكي الأسبق صاحب سياسة الدبلوماسية المكوكية؟", ["هنري كيسنجر", "جون كيري", "كولن باول", "هيلاري كلينتون"], 0),
+    ("ما هي الدولة التي تعتبر أصغر دولة في العالم من حيث المساحة؟", ["موناكو", "فاتيكان", "سان مارینو", "ليختنشتاين"], 1),
+    ("من هو الخليفة الأموي الذي أمر بضرب الدينار الإسلامي الخالص؟", ["معاوية بن أبي سفيان", "عبدالملك بن مروان", "الوليد بن عبدالملك", "عمر بن عبدالعزيز"], 1)
 ]
 
 
@@ -298,26 +317,15 @@ class RouletteView(discord.ui.View):
             child.disabled = True
 
 
-# لعبة من سيربح المليون (10 أسئلة دينية وسياسية)
+# لعبة من سيربح المليون (أسئلة متجددة وعشوائية كل مرة)
 class MillionaireView(discord.ui.View):
     def __init__(self, user_id):
         super().__init__(timeout=60)
         self.user_id = user_id
         self.step = 0
         
-        # بنك الأسئلة الـ 10 (دينية وسياسية وتاريخية)
-        self.questions = [
-            ("كم عدد سور القرآن الكريم؟", ["114", "113", "120", "110"], 0),
-            ("في أي عام هجري كانت غزوة بدر الكبرى؟", ["السنة الأولى", "السنة الثانية", "السنة الثالثة", "السنة الرابعة"], 1),
-            ("من هو الصحابي الملقب بأسد الله؟", ["خالد بن الوليد", "حمزة بن عبدالمطلب", "علي بن أبي طالب", "عمر بن الخطاب"], 1),
-            ("ما هي الدولة التي تضم مقر جامعة الدول العربية الرئيسي؟", ["السعودية", "مصر", "الإمارات", "الأردن"], 1),
-            ("من هو أول من أسلم من الرجال؟", ["عمر بن الخطاب", "أبو بكر الصديق", "عثمان بن عفان", "علي بن أبي طالب"], 1),
-            ("كم عدد عقر قارات العالم الكبرى؟", ["5", "6", "7", "8"], 2),
-            ("في أي سنة هجرية وقع فتح مكة؟", ["السنة 6 هـ", "السنة 8 هـ", "السنة 9 هـ", "السنة 10 هـ"], 1),
-            ("ما هي الدولة التي تمتلك أكبر عدد من الحدود البرية مع دول أخرى؟", ["روسيا", "الصين", "البرازيل", "ألمانيا"], 1),
-            ("من هو خازن الجنة (الملك الموكل بالجنة)؟", ["مالك", "رضوان", "جبريل", "ميكائيل"], 1),
-            ("ما هي عاصمة دولة الاتحاد الأوروبي الإدارية والسياسية؟", ["برلين", "بروكسل", "باريس", "أمستردام"], 1)
-        ]
+        # اختيار 10 أسئلة عشوائية فريدة من البنك في كل مرة تبدأ اللعبة
+        self.questions = random.sample(QUESTION_BANK, 10)
         self.update_buttons()
 
     def update_buttons(self):
@@ -353,7 +361,6 @@ class MillionaireView(discord.ui.View):
         return button_callback
 
 
-# لوحة التحكم بالأزرار
 class ControlPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
@@ -371,7 +378,6 @@ class ControlPanelView(discord.ui.View):
         await interaction.response.send_message(f"💬 حماية السبام أصبحت: **{state}**", ephemeral=True)
 
 
-# 3. الاقتراحات (منع تكرار التصويت لنفس الشخص)
 class SuggestionView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -405,16 +411,6 @@ class SuggestionView(discord.ui.View):
         self.children[0].label = f"موافق 👍 ({len(self.yes_voters)})"
         self.children[1].label = f"غير موافق 👎 ({len(self.no_voters)})"
         await interaction.response.edit_message(view=self)
-
-
-# تصويت عصابة أولد سكول
-class OldSchoolVoteView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=60)
-
-    @discord.ui.button(label="👑 التصويت لأفضل إداري/عضو متفاعل", style=discord.ButtonStyle.blurple)
-    async def vote_admin(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("🗳️ تم احتساب صوتك بنجاح ضمن فعاليات عصابة أولد سكول (Old School)!", ephemeral=True)
 
 
 # نظام التذاكر (Tickets)
@@ -531,7 +527,6 @@ async def control_panel(interaction: discord.Interaction):
 bot.tree.add_command(control_panel)
 
 
-# أوامر التذاكر (Tickets Setup)
 @app_commands.command(name="اعداد_التذاكر", description="إرسال لوحة (بانل) فتح التذاكر في الروم الحالي")
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.choices(السؤال_عن_السبب=[
@@ -556,6 +551,67 @@ async def setup_tickets(interaction: discord.Interaction, رتبة_المشرف�
     await interaction.channel.send(embed=embed, view=TicketPanelView())
     await interaction.response.send_message("✅ تم إعداد ونشر بانل التذاكر بنجاح!", ephemeral=True)
 bot.tree.add_command(setup_tickets)
+
+
+# ==================== 👥 أوامر عامة جديدة للأعضاء ====================
+@app_commands.command(name="تاريخ_التسجيل", description="معرفة تاريخ انضمامك أو انضمام عضو للسيرفر ولديسكورد")
+async def user_joined_date(interaction: discord.Interaction, العضو: discord.Member = None):
+    target = العضو or interaction.user
+    discord_created = target.created_at.strftime("%Y-%m-%d")
+    server_joined = target.joined_at.strftime("%Y-%m-%d") if target.joined_at else "غير معروف"
+
+    embed = discord.Embed(title=정보 := f"📅 معلومات الانضمام لـ {target.name}", color=discord.Color.blurple())
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.add_field(name="🌐 تاريخ إنشاء حساب ديسكورد", value=discord_created, inline=False)
+    embed.add_field(name="📥 تاريخ الانضمام للسيرفر", value=server_joined, inline=False)
+    await interaction.response.send_message(embed=embed)
+bot.tree.add_command(user_joined_date)
+
+
+@app_commands.command(name="صورة_الغلاف", description="عرض شعار (آيكون) السيرفر بحجم كبير")
+async def server_icon(interaction: discord.Interaction):
+    guild = interaction.guild
+    if not guild.icon:
+        return await interaction.response.send_message("❌ هذا السيرفر لا يمتلك شعاراً (Icon)!", ephemeral=True)
+    
+    embed = discord.Embed(title=f"🖼️ شعار سيرفر {guild.name}", color=discord.Color.gold())
+    embed.set_image(url=guild.icon.url)
+    await interaction.response.send_message(embed=embed)
+bot.tree.add_command(server_icon)
+
+
+# ==================== 🛡️ أوامر إدارية جديدة متقدمة ====================
+@app_commands.command(name="فك_الحظر", description="رفع الحظر عن عضو باستخدام الآيدي الخاص به")
+@app_commands.default_permissions(ban_members=True)
+async def unban_member(interaction: discord.Interaction, آيدي_العضو: str, السبب: str = "بدون سبب"):
+    try:
+        user_id = int( آيدي_العضو )
+        user = await bot.fetch_user(user_id)
+        await interaction.guild.unban(user, reason=السبب)
+        await interaction.response.send_message(f"🔓 تم فك الحظر بنجاح عن العضو: **{user.name}**", ephemeral=True)
+    except ValueError:
+        await interaction.response.send_message("❌ الآيدي المدخل غير صحيح (يجب أن يكون أرقاماً فقط).", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ لم يتم العثور على حظر بهذا الآيدي أو حدث خطأ: {e}", ephemeral=True)
+bot.tree.add_command(unban_member)
+
+
+@app_commands.command(name="طرد_الكل_من_الصوتي", description="طرد جميع الأعضاء الموجودين في روم صوتي معين")
+@app_commands.default_permissions(move_members=True)
+async def disconnect_all_voice(interaction: discord.Interaction, الروم_الصوتي: discord.VoiceChannel, السبب: str = "صيانة أو إزعاج"):
+    if not الروم_الصوتي.members:
+        return await interaction.response.send_message("❌ الروم الصوتي فارغ ولا يوجد أحد لطرده!", ephemeral=True)
+    
+    count = 0
+    for member in الروم_الصوتي.members:
+        try:
+            await member.move_to(None, reason=السبب)
+            count += 1
+        except:
+            pass
+
+    await interaction.response.send_message(f"👢 تم فصل وطرد **{count}** عضواً من الروم الصوتي {الروم_الصوتي.mention} بنجاح.", ephemeral=True)
+bot.tree.add_command(disconnect_all_voice)
 
 
 @app_commands.command(name="مسح", description="مسح عدد معين من الرسائل")
@@ -780,21 +836,8 @@ async def suggest(interaction: discord.Interaction, الاقتراح: str):
 bot.tree.add_command(suggest)
 
 
-# تصويت عصابة أولد سكول
-@app_commands.command(name="تصويت_أولد_سكول", description="تصويت خاص لعصابة أولد سكول لأفضل إداري أو عضو")
-async def oldschool_vote(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="🏴‍☠️ تصويت عصابة أولد سكول (Old School)",
-        description="صوّت الآن لاختيار أفضل إداري أو عضو متفاعل داخل عصابة Old School الرسمية! 🏆",
-        color=discord.Color.dark_red()
-    )
-    view = OldSchoolVoteView()
-    await interaction.response.send_message(embed=embed, view=view)
-bot.tree.add_command(oldschool_vote)
-
-
-# لعبة من سيربح المليون (الأسئلة الـ 10 الدينية والسياسية)
-@app_commands.command(name="من_سيربح_المليون", description="لعبة من سيربح المليون (10 أسئلة دينية وسياسية)")
+# لعبة من سيربح المليون (أسئلة متجددة وعشوائية)
+@app_commands.command(name="من_سيربح_المليون", description="لعبة من سيربح المليون (أسئلة عشوائية متجددة)")
 async def millionaire(interaction: discord.Interaction):
     view = MillionaireView(interaction.user.id)
     q_data = view.questions[0]
@@ -828,11 +871,11 @@ bot.tree.add_command(ping)
 async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🌟 قائمة أوامر Fynex Bot العربية", description="إذا لم تظهر الأوامر، اكتب `/تحديث_الأوامر`:", color=discord.Color.dark_embed())
     embed.add_field(name="⚙️ الأدوات الأساسية", value="`/تحديث_الأوامر` - `/إحصائيات_السيرفر` - `/بنق` - `/المساعدة`", inline=False)
-    embed.add_field(name="🛡️ الإدارة والتذاكر والحمايات", value="`/لوحة_التحكم` - `/اعداد_التذاكر` - `/الحمايات` - `/مسح` - `/قفل` - `/فتح`", inline=False)
-    embed.add_field(name="🛠️ الإدارة الصوتية والكتابية", value="`/كتم_صوتي` - `/فك_الكتم_الصوتي` - `/تايم_آوت` - `/طرد` - `/حظر`", inline=False)
+    embed.add_field(name="👤 الأوامر العامة للأعضاء", value="`/تاريخ_التسجيل` - `/صورة_الغلاف` - `/المستوى` - `/الرصيد` - `/يومي`", inline=False)
+    embed.add_field(name="🛡️ الإدارة والتذاكر والحمايات", value="`/لوحة_التحكم` - `/اعداد_التذاكر` - `/الحمايات` - `/فك_الحظر` - `/طرد_الكل_من_الصوتي`", inline=False)
+    embed.add_field(name="🛠️ الإدارة الصوتية والكتابية", value="`/مسح` - `/قفل` - `/فتح` - `/كتم_صوتي` - `/فك_الكتم_الصوتي` - `/تايم_آوت` - `/طرد` - `/حظر`", inline=False)
     embed.add_field(name="🌸 الترحيب والمعاينة", value="`/تحديد_روم_الترحيب` - `/تحديد_إطار_الترحيب` - `/تحديد_رسالة_الترحيب` - `/تحديد_الرتبة_التلقائية`", inline=False)
-    embed.add_field(name="📊 المستويات والاقتصاد", value="`/المستوى` - `/سمعة` - `/الرصيد` - `/يومي` - `/تحديد_المزاج`", inline=False)
-    embed.add_field(name="💡 التفاعل والألعاب", value="`/اقتراح` - `/تصويت_أولد_سكول` - `/من_سيربح_المليون` - `-روليت`", inline=False)
+    embed.add_field(name="💡 التفاعل والألعاب", value="`/اقتراح` - `/من_سيربح_المليون` (أسئلة متجددة عشوائياً) - `-روليت`", inline=False)
     embed.set_footer(text="Fynex Bot Ultimate Arabic Edition")
     await interaction.response.send_message(embed=embed)
 bot.tree.add_command(help_cmd)
