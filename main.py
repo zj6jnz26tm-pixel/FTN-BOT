@@ -722,28 +722,9 @@ async def jail_member(interaction: discord.Interaction, member: discord.Member, 
             for channel in guild.channels:
                 await channel.set_permissions(jail_role, read_messages=False, send_messages=False)
         except Exception as e:
-            return await interaction.response.send_message(f"❌ لم أتمكن من إنشاء رتبة السجن تلقائياً: {e}", ephemeral=True)
-
-    try:
-        await member.add_roles(jail_role, reason=reason)
-        await interaction.response.send_message(f"🔒 تم سجن العضو {member.mention} بنجاح. السبب: {reason}", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ خطأ أثناء سجن العضو: {e}", ephemeral=True)
-bot.tree.add_command(jail_member)
-
-
-@app_commands.command(name="فك_السجن", description="إفراج عن عضو من السجن")
-@app_commands.default_permissions(manage_roles=True)
-async def unjail_member(interaction: discord.Interaction, العضو: discord.Member):
-    jail_role = discord.utils.get(interaction.guild.roles, name="السجن")
-    if jail_role and jail_role in العضو.roles:
-        await العضو.remove_roles(jail_role)
-        await interaction.response.send_message(f"🔓 تم فك السجن عن العضو {العضو.mention} بنجاح.", ephemeral=True)
-    else:
-        await interaction.response.send_message("❌ العضو ليس مسجوناً أصلاً.", ephemeral=True)
-bot.tree.add_command(unjail_member)
-
-
+            return await interaction.response.send_message(f"❌ لم أتمكن من إنشاء رتبة السجن تلقائياً: {e}", ephemeral=
+        await member.add_roles(jail_role, reason=
+@app_commands.command(nam
 @app_commands.command(name="تغيير_الاسم", description="تغيير لقب أو اسم عضو في السيرفر")
 @app_commands.default_permissions(manage_nicknames=True)
 async def change_nickname(interaction: discord.Interaction, العضو: discord.Member, الاسم_الجديد: str):
