@@ -276,8 +276,8 @@ async def set_welcome_design(interaction: discord.Interaction, رقم_التصم
         welcome_settings[guild_id] = {}
         
     welcome_settings[guild_id]["design"] = رقم_التصميم
-    await interaction.response.send_message(f"🎨 تم تحديد تصميم الترحيب رقم: **{رقم_التصميم}** بنجاح.", ephemeral=True)
+    await interaction.response.send_message(f"🎨 تم تحديد تصميم الترحيب رقم: **{رقم_التصميم}** بنجاح.", ephemeral=
+import os
+bot.run(os.getenv("TOKEN"))
 
 
-# تشغيل البوت بالتوكن الخاص بك
-bot.run("YOUR_BOT_TOKEN")
