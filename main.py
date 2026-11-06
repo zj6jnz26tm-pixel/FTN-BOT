@@ -1,3 +1,4 @@
+إليك الكود كاملاً بعد تعديل أمر /سجن وإزالة الحروف العربية من أسماء المعاملات لتجنب خطأ الصياغة SyntaxError وتصحيحها لتتوافق مع معايير بايثون:
 import os
 import random
 import time
@@ -712,7 +713,7 @@ bot.tree.add_command(set_role_icon)
 
 @app_commands.command(name="سجن", description="إرسال عضو إلى السجن (إخفاء جميع الرومات عنه)")
 @app_commands.default_permissions(manage_roles=True)
-async def jail_member(interaction: discord.Interaction, العضو: discord.Member, السبب: str = "مخالفة"):
+async def jail_member(interaction: discord.Interaction, member: discord.Member, reason: str = "مخالفة"):
     guild = interaction.guild
     jail_role = discord.utils.get(guild.roles, name="السجن")
     if not jail_role:
@@ -724,8 +725,8 @@ async def jail_member(interaction: discord.Interaction, العضو: discord.Memb
             return await interaction.response.send_message(f"❌ لم أتمكن من إنشاء رتبة السجن تلقائياً: {e}", ephemeral=True)
 
     try:
-        await العضو.add_roles(jail_role, reason=السبب)
-        await interaction.response.send_message(f"🔒 تم سجن العضو {العضو.mention} بنجاح. السبب: {السبب}", ephemeral=True)
+        await member.add_roles(jail_role, reason=reason)
+        await interaction.response.send_message(f"🔒 تم سجن العضو {member.mention} بنجاح. السبب: {reason}", ephemeral=True)
     except Exception as e:
         await interaction.response.send_message(f"❌ خطأ أثناء سجن العضو: {e}", ephemeral=True)
 bot.tree.add_command(jail_member)
@@ -1102,3 +1103,4 @@ async def help_cmd(interaction: discord.Interaction):
 bot.tree.add_command(help_cmd)
 
 bot.run(os.getenv('TOKEN'))
+
