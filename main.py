@@ -4,13 +4,15 @@ import random
 import time
 from datetime import timedelta
 from collections import defaultdict
+import io
+from PIL import Image, ImageOps, ImageDraw
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
+intents.members = True  # مهم جداً لكي يتم رصد دخول الأعضاء (on_member_join)
 
 class FynexBot(commands.Bot):
     def __init__(self):
@@ -44,6 +46,9 @@ server_protections = {
     "anti_bots": False
 }
 
+# إعدادات الترحيب لكل سيرفر: {guild_id: {"channel_id": id, "message": "..."}}
+welcome_settings = {}
+
 user_message_timestamps = defaultdict(list)
 user_warnings = defaultdict(int)
 
@@ -55,6 +60,78 @@ MAX_WARNINGS = 3
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name} | Fynex Bot Online 🚀')
+
+
+# ==================== 🌸 نظام ترحيب الأعضاء الجدد ====================
+@bot.event
+async def on_member_join(member: discord.Member):
+    guild_id = member.guild.id
+    if guild_id not in welcome_settings:
+        return
+    
+    data = welcome_settings[guild_id]
+    channel_id = data.get("channel_id")
+    custom_msg = data.get("message", "أهلاً بك يا {member} في سيرفر {server}!")
+
+    if not channel_id:
+        return
+
+    channel = member.guild.get_channel(channel_id)
+    if not channel:
+        return
+
+    # معالجة النصوص المتغيرة في رسالة الترحيب
+    formatted_msg = custom_msg.format(
+        member=member.mention,
+        name=member.name,
+        server=member.guild.name,
+        count=member.guild.member_count
+    )
+
+    try:
+        # تحميل صورة العضو وتعديلها لإضافة إطار دائري أنيق
+        avatar_asset = member.display_avatar.with_size(256)
+        avatar_bytes = await avatar_asset.read()
+        
+        avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+        avatar_img = avatar_img.resize((150, 150))
+
+        # إنشاء قناع دائري للصورة
+        mask = Image.new("L", (150, 150), 0)
+        draw_mask = ImageDraw.Draw(mask)
+        draw_mask.ellipse((0, 0, 150, 150), fill=255)
+
+        # دمج الصورة مع الإطار الدائري
+        output_img = Image.new("RGBA", (170, 170), (0, 0, 0, 0))
+        
+        # رسم إطار خارجي متوهج/ملون حول صورة العضو
+        draw_frame = ImageDraw.Draw(output_img)
+        draw_frame.ellipse((0, 0, 170, 170), fill=(255, 215, 0, 255)) # لون إطار ذهبي
+        
+        # وضع الصورة الدائرية داخل الإطار
+        output_img.paste(avatar_img, (10, 10), mask=mask)
+
+        # حفظ الصورة المؤقتة في الذاكرة
+        buffer = io.BytesIO()
+        output_img.save(buffer, format="PNG")
+        buffer.seek(0)
+
+        file = discord.File(buffer, filename="welcome_avatar.png")
+
+        # بناء الإمبد (Embed) الاحترافي
+        embed = discord.Embed(
+            title="✨ عضو جديد انضم إلينا!",
+            description=formatted_msg,
+            color=discord.Color.gold()
+        )
+        embed.set_thumbnail(url="attachment://welcome_avatar.png")
+        embed.add_field(name="📊 ترتيبك بين الأعضاء", value=f"رقم العضو: #{member.guild.member_count}", inline=False)
+        embed.set_footer(text=f"نورت سيرفر {member.guild.name}", icon_url=member.guild.icon.url if member.guild.icon else None)
+
+        await channel.send(embed=embed, file=file)
+    except Exception as e:
+        print(f"Error in welcome event: {e}")
+
 
 @bot.event
 async def on_message(message):
@@ -231,7 +308,40 @@ async def unlock(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
-# ==================== 🛠️ الأوامر الإدارية الجديدة ====================
+# ==================== 🌸 أوامر إعدادات الترحيب ====================
+
+@bot.tree.command(name="set_welcome_channel", description="تحديد روم الترحيب بالأعضاء الجدد")
+@app_commands.default_permissions(manage_guild=True)
+async def set_welcome_channel(interaction: discord.Interaction, channel: discord.TextChannel):
+    guild_id = interaction.guild.id
+    if guild_id not in welcome_settings:
+        welcome_settings[guild_id] = {}
+    
+    welcome_settings[guild_id]["channel_id"] = channel.id
+    if "message" not in welcome_settings[guild_id]:
+        welcome_settings[guild_id]["message"] = "أهلاً بك يا {member} في سيرفر **{server}**! نتمنى لك إقامة ممتعة معنا 🌹"
+
+    embed = discord.Embed(title="✅ تم تحديد روم الترحيب", description=f"تم ربط روم الترحيب بنجاح في: {channel.mention}", color=discord.Color.green())
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="set_welcome_message", description="تخصيص رسالة الترحيب بالعضو الجديد")
+@app_commands.default_permissions(manage_guild=True)
+async def set_welcome_message(interaction: discord.Interaction, message: str):
+    guild_id = interaction.guild.id
+    if guild_id not in welcome_settings:
+        welcome_settings[guild_id] = {"channel_id": None}
+    
+    welcome_settings[guild_id]["message"] = message
+
+    embed = discord.Embed(
+        title="✨ تم تحديث رسالة الترحيب",
+        description=f"الرسالة الجديدة:\n> {message}\n\n*ملاحظة: يمكنك استخدام `{member}` لمنشن العضو و `{server}` لاسم السيرفر.*",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ==================== 🛠️ الأوامر الإدارية ====================
 
 @bot.tree.command(name="mute", description="كتم العضو في الروم الصوتي")
 @app_commands.default_permissions(mute_members=True)
@@ -318,6 +428,7 @@ async def ping(interaction: discord.Interaction):
 @bot.tree.command(name="help", description="عرض جميع أوامر Fynex Bot")
 async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🌟 قائمة أوامر Fynex Bot الشاملة", description="جميع الأوامر تعمل بنظام Slash Commands:", color=discord.Color.dark_embed())
+    embed.add_field(name="🌸 الترحيب", value="`/set_welcome_channel` - `/set_welcome_message`", inline=False)
     embed.add_field(name="🎮 الألعاب", value="`-روليت` (للإداريين)", inline=False)
     embed.add_field(name="🛡️ الإدارة والحمايات", value="`/protections` - `/toggle_protection` - `/clear` - `/lock` - `/unlock`", inline=False)
     embed.add_field(name="🛠️ الإدارة الصوتية والكتابية", value="`/mute` - `/unmute` - `/move` - `/deafen` - `/timeout`", inline=False)
